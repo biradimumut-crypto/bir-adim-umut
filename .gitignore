@@ -1,0 +1,47 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+.packages
+pubspec.lock
+
+# iOS/macOS
+ios/Flutter/GeneratedPluginRegistrant.*
+ios/Flutter/flutter_export_environment.sh
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/.symlinks/
+ios/Flutter/Flutter.podspec
+ios/Flutter/Flutter.framework
+Podfile.lock
+
+# Android/Java/Kotlin
+android/.gradle
+android/.idea
+android/local.properties
+android/GeneratedPluginRegistrant.java
+android/gradlew
+android/gradlew.bat
+android/gradle.properties
+
+# Firebase
+.env
+google-services.json
+GoogleService-Info.plist
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.lock
+*.swp
+
+# Misc
+.DS_Store
+*.log
+.env.local
+.env.*.local
+
+# Generated files
+lib/generated/
