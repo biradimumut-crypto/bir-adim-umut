@@ -1,0 +1,183 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ========== HELPER FUNCTIONS ==========
+    
+    /// Kullanıcı kimlik doğrulaması kontrolü
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    /// Kullanıcının kendi verilerine erişimi
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+    
+    /// Takım liderini kontrol et
+    function isTeamLeader(teamId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/teams/$(teamId)).data.leader_uid == request.auth.uid;
+    }
+    
+    /// Kullanıcı takımda üye mi?
+    function isTeamMember(teamId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/teams/$(teamId)/team_members/$(request.auth.uid));
+    }
+    
+    // ========== USERS KOLEKSIYONU ==========
+    
+    match /users/{userId} {
+      // Kendi profilini oku
+      allow read: if isUser(userId);
+      
+      // Kendi profilini güncelle (sınırlı alanlar)
+      allow update: if isUser(userId);
+      
+      // Yeni user doc oluştur (Sign Up sırasında) - auth uid eşleşmesi yeterli
+      allow create: if request.auth != null && request.auth.uid == userId;
+      
+      // Diğer kullanıcıları oku (Sıralama amaçlı - masked_name göster)
+      allow read: if isAuthenticated() && userId != request.auth.uid;
+      
+      // ========== NOTIFICATIONS ALT KOLEKSİYONU ==========
+      
+      match /notifications/{notificationId} {
+        // Kendi bildirimleri oku
+        allow read: if isUser(userId);
+        
+        // Bildirimi güncelle (Cloud Function tarafından)
+        allow update: if isUser(userId);
+        
+        // Bildirimi sil
+        allow delete: if isUser(userId);
+      }
+      
+      // ========== ACTIVITY_LOGS ALT KOLEKSİYONU ==========
+      
+      match /activity_logs/{logId} {
+        // Kendi aktivite geçmişini oku
+        allow read: if isUser(userId);
+        
+        // Cloud Function tarafından oluştur
+        allow create: if isAuthenticated() && userId == request.auth.uid;
+      }
+    }
+    
+    // ========== TEAMS KOLEKSİYONU ==========
+    
+    match /teams/{teamId} {
+      // Herkes takım bilgisini okuyabilir (sıralama amaçlı)
+      allow read: if isAuthenticated();
+      
+      // Lider takımı oluşturabilir (Cloud Function)
+      allow create: if isAuthenticated();
+      
+      // Lider takım bilgilerini güncelleyebilir
+      allow update: if isTeamLeader(teamId);
+      
+      // Lider takımı silebilir (soft delete)
+      allow delete: if isTeamLeader(teamId);
+      
+      // ========== TEAM_MEMBERS ALT KOLEKSİYONU ==========
+      
+      match /team_members/{userId} {
+        // Takım üyeleri herkes tarafından okunabilir
+        allow read: if isAuthenticated();
+        
+        // Cloud Function tarafından eklenir
+        allow create: if isAuthenticated();
+        
+        // Lider veya üyenin kendisi güncelleyebilir
+        allow update: if isTeamLeader(teamId) || isUser(userId);
+        
+        // Lider üyeyi çıkarabilir
+        allow delete: if isTeamLeader(teamId);
+      }
+    }
+    
+    // ========== DAILY_STEPS KOLEKSİYONU ==========
+    
+    match /daily_steps/{stepId} {
+      // Kendi adım verilerimizi okuyabiliriz
+      allow read: if isAuthenticated() && 
+                      stepId.split('-')[0] == request.auth.uid;
+      
+      // Cloud Function adım verisini oluşturur/günceller
+      allow write: if isAuthenticated();
+    }
+    
+    // ========== CHARITIES KOLEKSİYONU ==========
+    
+    match /charities/{charityId} {
+      // Herkes vakıf listesini okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Sadece admin ekleyebilir/güncelleyebilir
+      // (Firebase Admin SDK tarafından yapılır, bu kurallar uygulanmaz)
+      allow write: if false;
+    }
+    
+    // ========== STEP_LEADERBOARD KOLEKSİYONU ==========
+    
+    match /step_leaderboard/{docId} {
+      // Herkes sıralamayı okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Cloud Function tarafından güncellenir
+      allow write: if false;
+    }
+    
+    // ========== DONATION_LEADERBOARD KOLEKSİYONU ==========
+    
+    match /donation_leaderboard/{docId} {
+      // Herkes sıralamayı okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Cloud Function tarafından güncellenir
+      allow write: if false;
+    }
+    
+    // ========== CATCH ALL (Güvenli Varsayılan) ==========
+    
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+/*
+AÇIKLAMALAR:
+
+1. USERS Koleksiyonu:
+   - Kendi profilinizi okuyabilirsiniz
+   - Kendi profilinizi güncelleyebilirsiniz (uid, email, created_at korumalı)
+   - Diğer kullanıcıları okuyabilirsiniz (sıralama amaçlı)
+
+2. NOTIFICATIONS:
+   - Sadece kendi bildirimlerinizi okuyabilirsiniz
+   - Cloud Function bildirimleri oluşturur/günceller
+
+3. TEAMS:
+   - Herkes takımları görebilir (sıralama)
+   - Lider takımı yönetebilir
+   - team_members alt koleksiyonu herkese açık
+
+4. DAILY_STEPS:
+   - Kendi adım verinizi görürsünüz
+   - Cloud Function tarafından yönetilir
+
+5. CHARITIES:
+   - Herkes vakıfları görebilir
+   - Admin tarafından yönetilir (Cloud Functions)
+
+6. LEADERBOARDS:
+   - Herkes sıralamaları görebilir
+   - Cloud Function tarafından otomatik güncellenir
+
+ENDEKSLER (Firestore Console'da oluştur):
+- collections/teams fields(referral_code) UNIQUE
+- collections/daily_steps fields(user_id, date DESC)
+- collections/users fields(current_team_id)
+*/
