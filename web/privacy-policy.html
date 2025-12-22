@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HopeSteps - Gizlilik Politikası / Privacy Policy</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo h1 {
+            font-size: 2.5em;
+            background: linear-gradient(135deg, #8B5CF6, #06B6D4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .logo p {
+            color: #666;
+            font-size: 1.1em;
+        }
+        .lang-switch {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .lang-switch button {
+            padding: 10px 25px;
+            margin: 0 10px;
+            border: 2px solid #8B5CF6;
+            background: white;
+            color: #8B5CF6;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+        .lang-switch button.active, .lang-switch button:hover {
+            background: linear-gradient(135deg, #8B5CF6, #06B6D4);
+            color: white;
+            border-color: transparent;
+        }
+        .content {
+            display: none;
+        }
+        .content.active {
+            display: block;
+        }
+        h2 {
+            color: #8B5CF6;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        h3 {
+            color: #333;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        p, li {
+            margin-bottom: 10px;
+            color: #555;
+        }
+        ul {
+            padding-left: 25px;
+        }
+        .highlight {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(6, 182, 212, 0.1));
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #8B5CF6;
+        }
+        .contact-box {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 30px;
+        }
+        .contact-box a {
+            color: #8B5CF6;
+            text-decoration: none;
+        }
+        .contact-box a:hover {
+            text-decoration: underline;
+        }
+        .update-date {
+            text-align: center;
+            color: #888;
+            margin-top: 30px;
+            font-size: 0.9em;
+        }
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            .logo h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <h1>🌟 HopeSteps</h1>
+            <p>Bir Adım Umut</p>
+        </div>
+
+        <div class="lang-switch">
+            <button id="btn-tr" class="active" onclick="showLang('tr')">Türkçe</button>
+            <button id="btn-en" onclick="showLang('en')">English</button>
+        </div>
+
+        <!-- TÜRKÇE -->
+        <div id="content-tr" class="content active">
+            <h2>Gizlilik Politikası</h2>
+            
+            <div class="highlight">
+                <p><strong>HopeSteps</strong>, kullanıcılarının gizliliğine saygı duymaktadır. Bu politika, uygulamamızın hangi verileri topladığını ve nasıl kullandığını açıklamaktadır.</p>
+            </div>
+
+            <h2>1. Toplanan Veriler</h2>
+            
+            <h3>1.1 Hesap Bilgileri</h3>
+            <ul>
+                <li>E-posta adresi (kayıt ve giriş için)</li>
+                <li>Profil adı</li>
+                <li>Profil fotoğrafı (isteğe bağlı)</li>
+            </ul>
+
+            <h3>1.2 Sağlık ve Aktivite Verileri</h3>
+            <ul>
+                <li>Adım sayısı</li>
+                <li>Yürüyüş mesafesi</li>
+                <li>Yakılan kalori (hesaplanan)</li>
+                <li>Aktivite süresi</li>
+            </ul>
+            <p>Bu veriler, cihazınızın sağlık sensörlerinden (HealthKit/Google Fit) veya adım sayar sensöründen alınır.</p>
+
+            <h3>1.3 Konum Verileri</h3>
+            <ul>
+                <li>Yürüyüş rotanızı takip etmek için konum bilgisi (izin verildiğinde)</li>
+            </ul>
+            <p>Konum verileriniz yalnızca aktif yürüyüş sırasında toplanır ve rota görselleştirmesi için kullanılır.</p>
+
+            <h3>1.4 Cihaz Bilgileri</h3>
+            <ul>
+                <li>Cihaz modeli ve işletim sistemi</li>
+                <li>Uygulama sürümü</li>
+                <li>Benzersiz cihaz tanımlayıcısı (anonim analitik için)</li>
+            </ul>
+
+            <h2>2. Verilerin Kullanımı</h2>
+            <p>Topladığımız verileri şu amaçlarla kullanıyoruz:</p>
+            <ul>
+                <li>Adım ve aktivite takibi sağlamak</li>
+                <li>Bağış hesaplamalarını yapmak</li>
+                <li>Kişiselleştirilmiş deneyim sunmak</li>
+                <li>Uygulama performansını iyileştirmek</li>
+                <li>Bildirimler göndermek (izin verildiğinde)</li>
+            </ul>
+
+            <h2>3. Veri Güvenliği</h2>
+            <p>Verilerinizi korumak için aşağıdaki önlemleri alıyoruz:</p>
+            <ul>
+                <li>SSL/TLS şifreleme ile veri iletimi</li>
+                <li>Firebase güvenlik kuralları ile veri erişim kontrolü</li>
+                <li>Düzenli güvenlik güncellemeleri</li>
+            </ul>
+
+            <h2>4. Üçüncü Taraf Hizmetler</h2>
+            <p>Uygulamamız aşağıdaki üçüncü taraf hizmetleri kullanmaktadır:</p>
+            <ul>
+                <li><strong>Firebase (Google)</strong> - Kimlik doğrulama, veritabanı ve analitik</li>
+                <li><strong>Google Sign-In</strong> - Sosyal giriş seçeneği</li>
+                <li><strong>Apple HealthKit</strong> - iOS'ta sağlık verisi erişimi</li>
+                <li><strong>Google AdMob</strong> - Reklam gösterimi</li>
+            </ul>
+            <p>Bu hizmetlerin kendi gizlilik politikaları geçerlidir.</p>
+
+            <h2>5. Veri Saklama</h2>
+            <p>Verilerinizi hesabınız aktif olduğu sürece saklarız. Hesabınızı silmeniz durumunda tüm kişisel verileriniz 30 gün içinde kalıcı olarak silinir.</p>
+
+            <h2>6. Kullanıcı Hakları</h2>
+            <p>KVKK ve GDPR kapsamında şu haklara sahipsiniz:</p>
+            <ul>
+                <li>Verilerinize erişim talep etme</li>
+                <li>Verilerinizin düzeltilmesini isteme</li>
+                <li>Verilerinizin silinmesini talep etme</li>
+                <li>Veri işlemeye itiraz etme</li>
+                <li>Veri taşınabilirliği</li>
+            </ul>
+
+            <h2>7. Çocukların Gizliliği</h2>
+            <p>Uygulamamız 13 yaşın altındaki çocuklara yönelik değildir. 13 yaşın altındaki bireylerden bilerek kişisel bilgi toplamıyoruz.</p>
+
+            <h2>8. Politika Değişiklikleri</h2>
+            <p>Bu gizlilik politikasını zaman zaman güncelleyebiliriz. Önemli değişiklikler uygulama içinde bildirilecektir.</p>
+
+            <div class="contact-box">
+                <h3>📧 İletişim</h3>
+                <p>Gizlilik ile ilgili sorularınız için bizimle iletişime geçebilirsiniz:</p>
+                <p>E-posta: <a href="mailto:hopesteps.app@gmail.com">hopesteps.app@gmail.com</a></p>
+            </div>
+        </div>
+
+        <!-- ENGLISH -->
+        <div id="content-en" class="content">
+            <h2>Privacy Policy</h2>
+            
+            <div class="highlight">
+                <p><strong>HopeSteps</strong> respects the privacy of its users. This policy explains what data our application collects and how it is used.</p>
+            </div>
+
+            <h2>1. Data We Collect</h2>
+            
+            <h3>1.1 Account Information</h3>
+            <ul>
+                <li>Email address (for registration and login)</li>
+                <li>Profile name</li>
+                <li>Profile photo (optional)</li>
+            </ul>
+
+            <h3>1.2 Health and Activity Data</h3>
+            <ul>
+                <li>Step count</li>
+                <li>Walking distance</li>
+                <li>Calories burned (calculated)</li>
+                <li>Activity duration</li>
+            </ul>
+            <p>This data is obtained from your device's health sensors (HealthKit/Google Fit) or pedometer sensor.</p>
+
+            <h3>1.3 Location Data</h3>
+            <ul>
+                <li>Location information to track your walking route (when permission is granted)</li>
+            </ul>
+            <p>Your location data is only collected during active walks and is used for route visualization.</p>
+
+            <h3>1.4 Device Information</h3>
+            <ul>
+                <li>Device model and operating system</li>
+                <li>App version</li>
+                <li>Unique device identifier (for anonymous analytics)</li>
+            </ul>
+
+            <h2>2. How We Use Your Data</h2>
+            <p>We use the data we collect to:</p>
+            <ul>
+                <li>Provide step and activity tracking</li>
+                <li>Calculate donations</li>
+                <li>Offer personalized experience</li>
+                <li>Improve app performance</li>
+                <li>Send notifications (when permission is granted)</li>
+            </ul>
+
+            <h2>3. Data Security</h2>
+            <p>We take the following measures to protect your data:</p>
+            <ul>
+                <li>Data transmission with SSL/TLS encryption</li>
+                <li>Data access control with Firebase security rules</li>
+                <li>Regular security updates</li>
+            </ul>
+
+            <h2>4. Third-Party Services</h2>
+            <p>Our application uses the following third-party services:</p>
+            <ul>
+                <li><strong>Firebase (Google)</strong> - Authentication, database, and analytics</li>
+                <li><strong>Google Sign-In</strong> - Social login option</li>
+                <li><strong>Apple HealthKit</strong> - Health data access on iOS</li>
+                <li><strong>Google AdMob</strong> - Advertisement display</li>
+            </ul>
+            <p>These services have their own privacy policies.</p>
+
+            <h2>5. Data Retention</h2>
+            <p>We retain your data as long as your account is active. If you delete your account, all your personal data will be permanently deleted within 30 days.</p>
+
+            <h2>6. User Rights</h2>
+            <p>Under GDPR and similar regulations, you have the following rights:</p>
+            <ul>
+                <li>Request access to your data</li>
+                <li>Request correction of your data</li>
+                <li>Request deletion of your data</li>
+                <li>Object to data processing</li>
+                <li>Data portability</li>
+            </ul>
+
+            <h2>7. Children's Privacy</h2>
+            <p>Our application is not intended for children under 13 years of age. We do not knowingly collect personal information from individuals under 13.</p>
+
+            <h2>8. Policy Changes</h2>
+            <p>We may update this privacy policy from time to time. Significant changes will be notified within the application.</p>
+
+            <div class="contact-box">
+                <h3>📧 Contact</h3>
+                <p>For questions about privacy, you can contact us:</p>
+                <p>Email: <a href="mailto:hopesteps.app@gmail.com">hopesteps.app@gmail.com</a></p>
+            </div>
+        </div>
+
+        <p class="update-date">Son güncelleme / Last updated: 22 Aralık 2025</p>
+    </div>
+
+    <script>
+        function showLang(lang) {
+            document.getElementById('content-tr').classList.remove('active');
+            document.getElementById('content-en').classList.remove('active');
+            document.getElementById('btn-tr').classList.remove('active');
+            document.getElementById('btn-en').classList.remove('active');
+            
+            document.getElementById('content-' + lang).classList.add('active');
+            document.getElementById('btn-' + lang).classList.add('active');
+        }
+    </script>
+</body>
+</html>
