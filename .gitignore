@@ -45,3 +45,8 @@ GoogleService-Info.plist
 
 # Generated files
 lib/generated/
+
+# Release keystore
+android/key.properties
+android/app/*.jks
+*.jks

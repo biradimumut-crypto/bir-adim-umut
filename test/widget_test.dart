@@ -1,30 +1,71 @@
-// This is a basic Flutter widget test.
+// Bir Adım Umut - Widget Testleri
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Bu testler uygulama bileşenlerinin doğru çalıştığını kontrol eder.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:bir_adim_umut/main.dart';
+import 'package:bir_adim_umut/providers/theme_provider.dart';
+import 'package:bir_adim_umut/providers/language_provider.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  // SharedPreferences mock'u kurulumu
+  TestWidgetsFlutterBinding.ensureInitialized();
+  
+  setUp(() {
+    // SharedPreferences için mock değerler
+    SharedPreferences.setMockInitialValues({});
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  testWidgets('MyApp widget oluşturulabilir mi', (WidgetTester tester) async {
+    // Provider'lar ile MyApp widget'ını oluştur
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider(create: (_) => LanguageProvider()),
+        ],
+        child: const MyApp(),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // MaterialApp oluşturulmuş mu kontrol et
+    expect(find.byType(MaterialApp), findsOneWidget);
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('ThemeProvider light/dark tema değiştirebilir', (WidgetTester tester) async {
+    final themeProvider = ThemeProvider();
+
+    // Varsayılan tema kontrolü
+    expect(themeProvider.themeMode, ThemeMode.system);
+
+    // Light tema
+    await themeProvider.setThemeMode(ThemeMode.light);
+    expect(themeProvider.themeMode, ThemeMode.light);
+
+    // Dark tema
+    await themeProvider.setThemeMode(ThemeMode.dark);
+    expect(themeProvider.themeMode, ThemeMode.dark);
+  });
+
+  testWidgets('LanguageProvider dil değiştirebilir', (WidgetTester tester) async {
+    final languageProvider = LanguageProvider();
+    
+    // Pump yaparak async yüklenmeyi bekle
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+    // Varsayılan dil kontrolü (Türkçe olmalı)
+    expect(languageProvider.languageCode, 'tr');
+
+    // Dil değiştir
+    await languageProvider.setLanguage('en');
+    expect(languageProvider.languageCode, 'en');
+
+    // Tekrar Türkçe
+    await languageProvider.setLanguage('tr');
+    expect(languageProvider.languageCode, 'tr');
   });
 }

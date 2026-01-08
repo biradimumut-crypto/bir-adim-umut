@@ -323,10 +323,10 @@ Davet Edilen → Dialog Göster
 
 ### **3. DÖNÜŞTÜRME (Step Conversion)**
 ```
-2500 adım + Reklam İzle → +0.10 Hope
+Normal Dönüşüm: 2500 adım = 25 Hope (100 adım = 1 Hope)
+Progress Bar 2x Bonus: 2500 adım = 50 Hope
 10 dakika Cooldown Gerekli
 Max: 2500 adım/seferde
-Oran: 2500 adım = 0.10 Hope
 ```
 
 ### **4. BAĞIŞ (Donation)**

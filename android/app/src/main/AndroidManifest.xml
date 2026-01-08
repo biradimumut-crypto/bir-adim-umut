@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.bir_adim_umut">
+    package="com.hopesteps.app">
     
     <!-- İnternet ve Sensor İzni -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -7,10 +7,21 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
+    <!-- Google Fit / Health Connect İzinleri -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+    <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
 
     <application
-        android:label="Bir Adım Umut"
-        android:icon="@android:drawable/sym_def_app_icon">
+        android:label="OneHopeStep"
+        android:icon="@mipmap/ic_launcher">
+        
+        <!-- AdMob App ID -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-8054071059959102~3566778635"/>
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"
