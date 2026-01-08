@@ -1,0 +1,154 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ========== HELPER FUNCTIONS ==========
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.is_active == true;
+    }
+    
+    function isTeamLeader(teamId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/teams/$(teamId)).data.leader_uid == request.auth.uid;
+    }
+    
+    // ========== USERS KOLEKSIYONU ==========
+    
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if isUser(userId) || isAdmin();
+      
+      match /notifications/{notificationId} {
+        allow read, write: if isUser(userId);
+      }
+      
+      match /activity_logs/{logId} {
+        allow read: if isUser(userId);
+        allow create: if isAuthenticated();
+      }
+      
+      match /badges/{badgeId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated();
+      }
+    }
+    
+    // ========== ADMINS KOLEKSIYONU ==========
+    
+    match /admins/{adminId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // ========== TEAMS KOLEKSIYONU ==========
+    
+    match /teams/{teamId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isTeamLeader(teamId) || isAdmin();
+      allow delete: if isTeamLeader(teamId) || isAdmin();
+      
+      match /team_members/{memberId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update: if isTeamLeader(teamId) || isUser(memberId);
+        allow delete: if isTeamLeader(teamId);
+      }
+    }
+    
+    // ========== DAILY_STEPS KOLEKSIYONU ==========
+    
+    match /daily_steps/{docId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+    }
+    
+    // ========== CHARITIES KOLEKSIYONU ==========
+    
+    match /charities/{charityId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // ========== DONATIONS KOLEKSIYONU ==========
+    
+    match /donations/{donationId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+    }
+    
+    // ========== ACTIVITY_LOGS KOLEKSIYONU ==========
+    
+    match /activity_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+    }
+    
+    // ========== LEADERBOARD KOLEKSIYONLARI ==========
+    
+    match /step_leaderboard/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    match /hope_leaderboard/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    match /team_leaderboard/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    // ========== INVITATIONS KOLEKSIYONU ==========
+    
+    match /invitations/{inviteId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // ========== BADGES KOLEKSIYONU ==========
+    
+    match /badges/{badgeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // ========== APP_SETTINGS KOLEKSIYONU ==========
+    
+    match /app_settings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // ========== SESSIONS KOLEKSIYONU ==========
+    
+    match /sessions/{sessionId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // ========== AD_LOGS KOLEKSIYONU ==========
+    
+    match /ad_logs/{logId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // ========== USER_BADGES KOLEKSIYONU ==========
+    
+    match /user_badges/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}

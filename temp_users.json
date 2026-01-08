@@ -1,0 +1,38 @@
+{"users": [
+{
+  "localId": "5IWNVdVz5kezNR13gcljAvG6xHQ2",
+  "email": "biradimumut@gmail.com",
+  "emailVerified": true,
+  "displayName": "Bir Adım Umut",
+  "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocIbUEl4ZmCi9eq4JTcTtIgGK7IhQcq6LlfvNB2puvQYUpN8-g=s96-c",
+  "lastSignedInAt": "1767733360796",
+  "createdAt": "1767733360795",
+  "providerUserInfo": [
+    {
+      "providerId": "google.com",
+      "rawId": "112307732396084233221",
+      "email": "biradimumut@gmail.com",
+      "displayName": "Bir Adım Umut",
+      "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocIbUEl4ZmCi9eq4JTcTtIgGK7IhQcq6LlfvNB2puvQYUpN8-g=s96-c"
+    }
+  ]
+},
+{
+  "localId": "JaO18uxiN2hFfGPG1FdtfNDbzOq1",
+  "email": "886z4jrt47@privaterelay.appleid.com",
+  "emailVerified": true,
+  "displayName": "Sefa Sercan Karslı",
+  "lastSignedInAt": "1767733275764",
+  "createdAt": "1767733275764",
+  "providerUserInfo": []
+},
+{
+  "localId": "NGJL7KXGrTNcNASi7mx68hER1SO2",
+  "email": "deneme@deneme.com",
+  "emailVerified": false,
+  "passwordHash": "3MUWBJOD6DFLyFo/jjQY00EKbIhn5hRV/im1B0+nqtym96lle5aUX8+dI3Zg1Vg4IlhbGVCauj2xmUY7L1Jw9w==",
+  "salt": "iu6opnOgm9QSdQ==",
+  "lastSignedInAt": "1767733087824",
+  "createdAt": "1765549312917",
+  "providerUserInfo": []
+}]}

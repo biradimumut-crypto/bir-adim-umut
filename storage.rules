@@ -1,0 +1,54 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // ========== HELPER FUNCTIONS ==========
+    
+    /// Kullanıcı kimlik doğrulaması kontrolü
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    /// Dosya boyutu kontrolü (max 5MB)
+    function isValidSize() {
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+    
+    /// Dosya türü kontrolü (sadece resimler)
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    // ========== PROFILE PHOTOS ==========
+    
+    match /profile_photos/{userId}.jpg {
+      // Kendi profil fotoğrafını okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Kendi profil fotoğrafını yükleyebilir/güncelleyebilir
+      allow write: if isAuthenticated() 
+                   && request.auth.uid == userId
+                   && isValidSize()
+                   && isImage();
+    }
+    
+    // ========== TEAM LOGOS ==========
+    
+    match /team_logos/{teamId}.jpg {
+      // Herkes takım logosunu okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Oturum açmış kullanıcılar takım logosu yükleyebilir
+      // (Liderlik kontrolü Firestore'da yapılıyor)
+      allow write: if isAuthenticated()
+                   && isValidSize()
+                   && isImage();
+    }
+    
+    // ========== CATCH ALL (Güvenli Varsayılan) ==========
+    
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

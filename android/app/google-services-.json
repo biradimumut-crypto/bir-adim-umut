@@ -1,0 +1,82 @@
+{
+  "project_info": {
+    "project_number": "568696463280",
+    "project_id": "bir-adim-umut-yeni",
+    "storage_bucket": "bir-adim-umut-yeni.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:568696463280:android:1c990d871261632e7a4075",
+        "android_client_info": {
+          "package_name": "com.example.bir_adim_umut"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "568696463280-1vmd7b813a016g9q2i371m8g4i38v1ds.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3u8jK6JuL7BIllbBU7FuZgkftptpYwEI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "568696463280-1vmd7b813a016g9q2i371m8g4i38v1ds.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "568696463280-d28dnni2818l92of59n9ss4m0398cf9m.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.birAdimUmut"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:568696463280:android:b25a1858b7c525e27a4075",
+        "android_client_info": {
+          "package_name": "com.hopesteps.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "568696463280-1vmd7b813a016g9q2i371m8g4i38v1ds.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3u8jK6JuL7BIllbBU7FuZgkftptpYwEI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "568696463280-1vmd7b813a016g9q2i371m8g4i38v1ds.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "568696463280-d28dnni2818l92of59n9ss4m0398cf9m.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.birAdimUmut"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
