@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OneHopeStep - Kullanım Koşulları / Terms of Service</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo h1 {
+            font-size: 2.5em;
+            background: linear-gradient(135deg, #8B5CF6, #06B6D4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .logo p {
+            color: #666;
+            font-size: 1.1em;
+        }
+        .lang-switch {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .lang-switch button {
+            padding: 10px 25px;
+            margin: 0 10px;
+            border: 2px solid #8B5CF6;
+            background: white;
+            color: #8B5CF6;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+        .lang-switch button.active, .lang-switch button:hover {
+            background: linear-gradient(135deg, #8B5CF6, #06B6D4);
+            color: white;
+            border-color: transparent;
+        }
+        .content {
+            display: none;
+        }
+        .content.active {
+            display: block;
+        }
+        h2 {
+            color: #8B5CF6;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        h3 {
+            color: #333;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        p, li {
+            margin-bottom: 10px;
+            color: #555;
+        }
+        ul, ol {
+            padding-left: 25px;
+        }
+        .highlight {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(6, 182, 212, 0.1));
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #8B5CF6;
+        }
+        .warning {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(249, 115, 22, 0.1));
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #EF4444;
+        }
+        .contact-box {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 30px;
+        }
+        .contact-box a {
+            color: #8B5CF6;
+            text-decoration: none;
+        }
+        .contact-box a:hover {
+            text-decoration: underline;
+        }
+        .update-date {
+            text-align: center;
+            color: #888;
+            margin-top: 30px;
+            font-size: 0.9em;
+        }
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            .logo h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="logo.png" alt="OneHopeStep Logo" style="width: 120px; height: 120px; margin-bottom: 15px; border-radius: 20px;">
+            <h1>OneHopeStep</h1>
+            <p>Bir Adım Umut</p>
+        </div>
+
+        <div class="lang-switch">
+            <button id="btn-tr" class="active" onclick="showLang('tr')">Türkçe</button>
+            <button id="btn-en" onclick="showLang('en')">English</button>
+        </div>
+
+        <!-- TÜRKÇE -->
+        <div id="content-tr" class="content active">
+            <h2>HOPESTEPS KULLANIM KOŞULLARI VE LİSANS SÖZLEŞMESİ</h2>
+            
+            <div class="highlight">
+                <p><strong>Son Güncelleme:</strong> 23 Aralık 2025</p>
+                <p>Bu Kullanım Koşulları, OneHopeStep (Bir Adım Umut) mobil uygulamasını kullanımınızı düzenleyen yasal bir sözleşmedir. Uygulamayı indirip kullanarak bu koşulları kabul etmiş sayılırsınız.</p>
+            </div>
+
+            <h2>1. TANIM VE TARAFLAR</h2>
+            <ul>
+                <li><strong>"Uygulama"</strong> veya <strong>"OneHopeStep"</strong>: OneHopeStep (Bir Adım Umut) mobil uygulaması</li>
+                <li><strong>"Kullanıcı"</strong>: Uygulamayı indiren ve kullanan gerçek kişi</li>
+                <li><strong>"Hope"</strong>: Uygulama içinde adımların dönüştürüldüğü sanal puan birimi</li>
+                <li><strong>"Bağış"</strong>: Hope puanlarının hayır kurumlarına aktarılması işlemi</li>
+                <li><strong>"Hesap"</strong>: Kullanıcının uygulama içindeki kayıtlı profili</li>
+            </ul>
+            <p>OneHopeStep, sosyal sorumluluk amacıyla geliştirilmiş olup, kullanıcıların adımlarını Hope puanına dönüştürerek hayır kurumlarına bağış yapmalarını sağlayan ücretsiz bir mobil uygulamadır.</p>
+
+            <h2>2. UYGULAMAYA KATILIM</h2>
+            <h3>2.1 Kayıt ve Hesap Oluşturma</h3>
+            <ul>
+                <li>Uygulamayı App Store veya Google Play Store'dan ücretsiz olarak indirebilirsiniz</li>
+                <li>Hesap oluşturmak için geçerli bir e-posta adresi veya Google hesabı gerekmektedir</li>
+                <li>18 yaşından küçük kullanıcıların veli/vasi onayı alması gerekmektedir</li>
+                <li>Her kullanıcı yalnızca bir (1) hesap oluşturabilir</li>
+            </ul>
+
+            <h3>2.2 Hak Kazanma Koşulları</h3>
+            <p>OneHopeStep'i kullanmaya hak kazanmak için:</p>
+            <ul>
+                <li>Türkiye Cumhuriyeti kanunlarına tabi olmayı kabul etmelisiniz</li>
+                <li>Bu kullanım koşullarını ve gizlilik politikasını kabul etmelisiniz</li>
+                <li>Uygulamanın yasaklı veya kısıtlı olduğu bölgelerde bulunmamalısınız</li>
+            </ul>
+
+            <h2>3. HOPE SİSTEMİ VE ADIM DÖNÜŞÜMÜ</h2>
+            
+            <h3>3.1 Adım Sayma ve Hope Kazanma</h3>
+            <ul>
+                <li>Uygulama, cihazınızın sağlık sensörlerinden (Apple HealthKit / Google Fit / Adım Sayar) adım verilerini alır</li>
+                <li>Adımlar, uygulama tarafından belirlenen oranda Hope puanına dönüştürülür</li>
+                <li>Dönüşüm oranları uygulama tarafından değiştirilebilir</li>
+                <li>Günlük dönüştürülebilecek maksimum adım sınırı uygulanabilir</li>
+            </ul>
+
+            <h3>3.2 Hope Puanlarının Kullanımı</h3>
+            <div class="warning">
+                <p><strong>ÖNEMLİ:</strong> Hope puanları yalnızca uygulama içindeki hayır kurumlarına bağış yapmak için kullanılabilir. Hope puanları:</p>
+                <ul>
+                    <li>Nakit paraya dönüştürülemez</li>
+                    <li>Başka kullanıcılara transfer edilemez</li>
+                    <li>Satılamaz veya takas edilemez</li>
+                    <li>Herhangi bir maddi değer ifade etmez</li>
+                </ul>
+            </div>
+
+            <h3>3.3 Bağış İşlemleri</h3>
+            <ul>
+                <li>Kazanılan Hope puanları, uygulama içinde listelenen hayır kurumlarına bağışlanabilir</li>
+                <li>Bağış yapılan kurum ve miktar kullanıcının tercihine bağlıdır</li>
+                <li>Yapılan bağışlar geri alınamaz</li>
+                <li>Sponsorlar tarafından desteklenen bağışlar, sponsor katkılarına göre hayır kurumlarına aktarılır</li>
+            </ul>
+
+            <h2>4. TEK CİHAZ - TEK HESAP KURALI</h2>
+            
+            <div class="warning">
+                <p><strong>UYARI - DOLANDIRICILIK ÖNLEMİ:</strong></p>
+            </div>
+            
+            <h3>4.1 Cihaz Kısıtlaması</h3>
+            <ul>
+                <li>Her Hesap yalnızca bir cihaza bağlı olabilir ve yalnızca aynı kişi tarafından kullanılabilir</li>
+                <li>Aynı cihazdan birden fazla hesaba adım aktarımı yapılamaz</li>
+                <li>Bir cihaz, aynı gün içinde yalnızca bir hesaba adım dönüştürebilir</li>
+                <li>Bu kuralın ihlal edildiği durumlarda hesaplar askıya alınabilir veya kapatılabilir</li>
+            </ul>
+
+            <h3>4.2 Tespit ve Yaptırımlar</h3>
+            <p>Aynı cihazdan birden fazla hesapla adım dönüştürme girişimi tespit edildiğinde:</p>
+            <ol>
+                <li>İlgili hesapların Hope bakiyeleri sıfırlanabilir</li>
+                <li>Hesaplar kalıcı olarak kapatılabilir</li>
+                <li>Kullanıcının tüm bağış geçmişi iptal edilebilir</li>
+                <li>Gerekli görüldüğünde yasal işlem başlatılabilir</li>
+            </ol>
+
+            <h2>5. YASAKLI DAVRANIŞLAR</h2>
+            <p>Aşağıdaki davranışlar kesinlikle yasaktır ve hesap kapatma ile sonuçlanabilir:</p>
+            <ul>
+                <li>Sahte adım verisi oluşturma veya manipüle etme</li>
+                <li>Üçüncü parti yazılımlar kullanarak adım sayısını yapay olarak artırma</li>
+                <li>Birden fazla hesap oluşturma</li>
+                <li>Başkasının hesabını kullanma veya hesabını başkasına kullandırma</li>
+                <li>Uygulamanın güvenlik sistemlerini atlatmaya çalışma</li>
+                <li>Uygulamayı tersine mühendislik yapma, kaynak kodunu çıkarmaya çalışma</li>
+                <li>Uygulamayı kötü amaçlı kullanma</li>
+                <li>Diğer kullanıcıları rahatsız etme, taciz etme</li>
+                <li>Yanıltıcı veya yanlış bilgi paylaşma</li>
+            </ul>
+
+            <h2>6. HESAP YÖNETİMİ</h2>
+            
+            <h3>6.1 Hesap Güvenliği</h3>
+            <ul>
+                <li>Hesabınızın güvenliğinden siz sorumlusunuz</li>
+                <li>Şifrenizi kimseyle paylaşmamalısınız</li>
+                <li>Yetkisiz erişim tespit ettiğinizde derhal bize bildirmelisiniz</li>
+            </ul>
+
+            <h3>6.2 Hesap Askıya Alma ve Kapatma</h3>
+            <p>Aşağıdaki durumlarda hesabınız askıya alınabilir veya kapatılabilir:</p>
+            <ul>
+                <li>Kullanım koşullarının ihlali</li>
+                <li>Dolandırıcılık veya suistimal şüphesi</li>
+                <li>Yasal gereklilikler</li>
+                <li>Uzun süreli inaktivite (180 gün)</li>
+            </ul>
+
+            <h3>6.3 Hesap Silme</h3>
+            <ul>
+                <li>Hesabınızı istediğiniz zaman uygulama ayarlarından silebilirsiniz</li>
+                <li>Hesap silindiğinde tüm Hope bakiyesi ve veriler kalıcı olarak silinir</li>
+                <li>Silme işlemi geri alınamaz</li>
+            </ul>
+
+            <h2>7. FİKRİ MÜLKİYET HAKLARI</h2>
+            <ul>
+                <li>OneHopeStep uygulaması ve tüm içerikleri (tasarım, logo, yazılım, metin, grafik vb.) fikri mülkiyet hakları kapsamında korunmaktadır</li>
+                <li>Kullanıcılar, uygulamayı yalnızca kişisel ve ticari olmayan amaçlarla kullanabilir</li>
+                <li>Uygulamanın herhangi bir bölümünü kopyalamak, değiştirmek, dağıtmak veya ticari amaçla kullanmak yasaktır</li>
+            </ul>
+
+            <h2>8. SORUMLULUK SINIRLANDIRMASI</h2>
+            
+            <div class="warning">
+                <p><strong>ÖNEMLİ UYARI:</strong></p>
+            </div>
+
+            <h3>8.1 Garanti Reddi</h3>
+            <p>OneHopeStep uygulaması "OLDUĞU GİBİ" sunulmaktadır. Aşağıdaki konularda herhangi bir garanti verilmemektedir:</p>
+            <ul>
+                <li>Uygulamanın kesintisiz veya hatasız çalışacağı</li>
+                <li>Adım sayımının %100 doğru olacağı</li>
+                <li>Belirli bir amaca uygunluk</li>
+                <li>Üçüncü parti hizmetlerin sürekli kullanılabilirliği</li>
+            </ul>
+
+            <h3>8.2 Sorumluluk Sınırı</h3>
+            <p>OneHopeStep, aşağıdaki durumlardan kaynaklanan zararlardan sorumlu tutulamaz:</p>
+            <ul>
+                <li>Uygulama kesintileri veya teknik arızalar</li>
+                <li>Veri kaybı</li>
+                <li>Cihaz uyumsuzlukları</li>
+                <li>Üçüncü parti hizmet sağlayıcıların hataları</li>
+                <li>Kullanıcının kendi hatası veya ihmali</li>
+                <li>Mücbir sebepler (doğal afet, savaş, pandemi vb.)</li>
+            </ul>
+
+            <h3>8.3 Tazminat</h3>
+            <p>Kullanıcı, bu koşulları ihlal etmesi nedeniyle doğabilecek her türlü zarar, kayıp, masraf ve talepten OneHopeStep'i muaf tutmayı kabul eder.</p>
+
+            <h2>9. TAKIM ÖZELLİKLERİ</h2>
+            <ul>
+                <li>Kullanıcılar takım oluşturabilir veya mevcut takımlara katılabilir</li>
+                <li>Takım liderleri, takım yönetim haklarına sahiptir</li>
+                <li>Takım içi sıralama ve istatistikler görüntülenebilir</li>
+                <li>Takım isimleri uygunsuz içerik barındırmamalıdır</li>
+            </ul>
+
+            <h2>10. LİDERLİK TABLOSU</h2>
+            <ul>
+                <li>Kullanıcılar, gizlilik ayarlarına göre liderlik tablosunda yer alabilir</li>
+                <li>Liderlik tablosunda gösterilen isimler maskelenebilir</li>
+                <li>Dolandırıcılık tespit edilen kullanıcılar liderlik tablosundan çıkarılır</li>
+            </ul>
+
+            <h2>11. DEĞİŞİKLİKLER</h2>
+            <ul>
+                <li>Bu kullanım koşulları herhangi bir zamanda değiştirilebilir</li>
+                <li>Önemli değişiklikler uygulama içinden bildirilecektir</li>
+                <li>Değişiklik sonrası uygulamayı kullanmaya devam etmeniz, yeni koşulları kabul ettiğiniz anlamına gelir</li>
+            </ul>
+
+            <h2>12. UYGULANACAK HUKUK VE YETKİLİ MAHKEME</h2>
+            <ul>
+                <li>Bu sözleşme Türkiye Cumhuriyeti kanunlarına tabidir</li>
+                <li>Uyuşmazlıklarda Türkiye Cumhuriyeti mahkemeleri yetkilidir</li>
+                <li>Tüketici hakları saklıdır</li>
+            </ul>
+
+            <h2>13. BÖLÜNEBİLİRLİK</h2>
+            <p>Bu sözleşmenin herhangi bir hükmünün geçersiz veya uygulanamaz bulunması, diğer hükümlerin geçerliliğini etkilemez.</p>
+
+            <h2>14. FESİH</h2>
+            <ul>
+                <li>Her iki taraf da bu sözleşmeyi herhangi bir zamanda feshedebilir</li>
+                <li>Kullanıcı, hesabını silerek sözleşmeyi feshedebilir</li>
+                <li>OneHopeStep, kullanım koşulları ihlalinde hesabı kapatarak sözleşmeyi feshedebilir</li>
+            </ul>
+
+            <h2>15. İLETİŞİM</h2>
+            <div class="contact-box">
+                <p>Sorularınız veya şikayetleriniz için:</p>
+                <p><strong>E-posta:</strong> <a href="mailto:hopesteps.app@gmail.com">hopesteps.app@gmail.com</a></p>
+            </div>
+
+            <p class="update-date">Bu kullanım koşulları en son 23 Aralık 2025 tarihinde güncellenmiştir.</p>
+        </div>
+
+        <!-- ENGLISH -->
+        <div id="content-en" class="content">
+            <h2>HOPESTEPS TERMS OF SERVICE AND LICENSE AGREEMENT</h2>
+            
+            <div class="highlight">
+                <p><strong>Last Updated:</strong> December 23, 2025</p>
+                <p>These Terms of Service constitute a legal agreement governing your use of the OneHopeStep (Bir Adım Umut) mobile application. By downloading and using the application, you agree to these terms.</p>
+            </div>
+
+            <h2>1. DEFINITIONS AND PARTIES</h2>
+            <ul>
+                <li><strong>"Application"</strong> or <strong>"OneHopeStep"</strong>: The OneHopeStep (Bir Adım Umut) mobile application</li>
+                <li><strong>"User"</strong>: The natural person who downloads and uses the application</li>
+                <li><strong>"Hope"</strong>: The virtual point unit into which steps are converted within the application</li>
+                <li><strong>"Donation"</strong>: The process of transferring Hope points to charities</li>
+                <li><strong>"Account"</strong>: The user's registered profile within the application</li>
+            </ul>
+            <p>OneHopeStep is a free mobile application developed for social responsibility purposes, enabling users to convert their steps into Hope points and donate to charities.</p>
+
+            <h2>2. PARTICIPATION IN THE APPLICATION</h2>
+            <h3>2.1 Registration and Account Creation</h3>
+            <ul>
+                <li>You can download the application for free from the App Store or Google Play Store</li>
+                <li>A valid email address or Google account is required to create an account</li>
+                <li>Users under 18 years of age must obtain parental/guardian consent</li>
+                <li>Each user may only create one (1) account</li>
+            </ul>
+
+            <h3>2.2 Eligibility Requirements</h3>
+            <p>To be eligible to use OneHopeStep:</p>
+            <ul>
+                <li>You must agree to be subject to the laws of the Republic of Turkey</li>
+                <li>You must accept these terms of use and privacy policy</li>
+                <li>You must not be in regions where the application is prohibited or restricted</li>
+            </ul>
+
+            <h2>3. HOPE SYSTEM AND STEP CONVERSION</h2>
+            
+            <h3>3.1 Step Counting and Earning Hope</h3>
+            <ul>
+                <li>The application receives step data from your device's health sensors (Apple HealthKit / Google Fit / Pedometer)</li>
+                <li>Steps are converted to Hope points at the rate determined by the application</li>
+                <li>Conversion rates may be changed by the application</li>
+                <li>A daily maximum step conversion limit may be applied</li>
+            </ul>
+
+            <h3>3.2 Use of Hope Points</h3>
+            <div class="warning">
+                <p><strong>IMPORTANT:</strong> Hope points can only be used to donate to charities within the application. Hope points:</p>
+                <ul>
+                    <li>Cannot be converted to cash</li>
+                    <li>Cannot be transferred to other users</li>
+                    <li>Cannot be sold or exchanged</li>
+                    <li>Do not represent any monetary value</li>
+                </ul>
+            </div>
+
+            <h3>3.3 Donation Transactions</h3>
+            <ul>
+                <li>Earned Hope points can be donated to charities listed within the application</li>
+                <li>The charity and amount donated are at the user's discretion</li>
+                <li>Donations made cannot be reversed</li>
+                <li>Donations supported by sponsors are transferred to charities according to sponsor contributions</li>
+            </ul>
+
+            <h2>4. ONE DEVICE - ONE ACCOUNT RULE</h2>
+            
+            <div class="warning">
+                <p><strong>WARNING - FRAUD PREVENTION:</strong></p>
+            </div>
+            
+            <h3>4.1 Device Restriction</h3>
+            <ul>
+                <li>Each Account can only be linked to one device and used by the same person only</li>
+                <li>Step transfers cannot be made to multiple accounts from the same device</li>
+                <li>A device can only convert steps for one account within the same day</li>
+                <li>Accounts may be suspended or closed if this rule is violated</li>
+            </ul>
+
+            <h3>4.2 Detection and Sanctions</h3>
+            <p>When attempts to convert steps with multiple accounts from the same device are detected:</p>
+            <ol>
+                <li>Hope balances of related accounts may be reset</li>
+                <li>Accounts may be permanently closed</li>
+                <li>The user's entire donation history may be cancelled</li>
+                <li>Legal action may be initiated when deemed necessary</li>
+            </ol>
+
+            <h2>5. PROHIBITED BEHAVIORS</h2>
+            <p>The following behaviors are strictly prohibited and may result in account closure:</p>
+            <ul>
+                <li>Creating or manipulating fake step data</li>
+                <li>Using third-party software to artificially increase step counts</li>
+                <li>Creating multiple accounts</li>
+                <li>Using someone else's account or allowing others to use your account</li>
+                <li>Attempting to bypass the application's security systems</li>
+                <li>Reverse engineering the application or attempting to extract source code</li>
+                <li>Using the application for malicious purposes</li>
+                <li>Harassing or disturbing other users</li>
+                <li>Sharing misleading or false information</li>
+            </ul>
+
+            <h2>6. ACCOUNT MANAGEMENT</h2>
+            
+            <h3>6.1 Account Security</h3>
+            <ul>
+                <li>You are responsible for the security of your account</li>
+                <li>You should not share your password with anyone</li>
+                <li>You must notify us immediately if you detect unauthorized access</li>
+            </ul>
+
+            <h3>6.2 Account Suspension and Closure</h3>
+            <p>Your account may be suspended or closed in the following cases:</p>
+            <ul>
+                <li>Violation of terms of use</li>
+                <li>Suspicion of fraud or abuse</li>
+                <li>Legal requirements</li>
+                <li>Extended inactivity (180 days)</li>
+            </ul>
+
+            <h3>6.3 Account Deletion</h3>
+            <ul>
+                <li>You can delete your account at any time from the application settings</li>
+                <li>When the account is deleted, all Hope balance and data are permanently deleted</li>
+                <li>Deletion is irreversible</li>
+            </ul>
+
+            <h2>7. INTELLECTUAL PROPERTY RIGHTS</h2>
+            <ul>
+                <li>The OneHopeStep application and all content (design, logo, software, text, graphics, etc.) are protected under intellectual property rights</li>
+                <li>Users may only use the application for personal and non-commercial purposes</li>
+                <li>Copying, modifying, distributing, or using any part of the application for commercial purposes is prohibited</li>
+            </ul>
+
+            <h2>8. LIMITATION OF LIABILITY</h2>
+            
+            <div class="warning">
+                <p><strong>IMPORTANT NOTICE:</strong></p>
+            </div>
+
+            <h3>8.1 Warranty Disclaimer</h3>
+            <p>The OneHopeStep application is provided "AS IS". No warranty is given regarding:</p>
+            <ul>
+                <li>That the application will operate without interruption or error</li>
+                <li>That step counting will be 100% accurate</li>
+                <li>Fitness for a particular purpose</li>
+                <li>Continuous availability of third-party services</li>
+            </ul>
+
+            <h3>8.2 Liability Limit</h3>
+            <p>OneHopeStep cannot be held responsible for damages arising from:</p>
+            <ul>
+                <li>Application interruptions or technical failures</li>
+                <li>Data loss</li>
+                <li>Device incompatibilities</li>
+                <li>Errors of third-party service providers</li>
+                <li>User's own fault or negligence</li>
+                <li>Force majeure (natural disaster, war, pandemic, etc.)</li>
+            </ul>
+
+            <h3>8.3 Indemnification</h3>
+            <p>The user agrees to hold OneHopeStep harmless from any damages, losses, expenses, and claims that may arise due to violation of these terms.</p>
+
+            <h2>9. TEAM FEATURES</h2>
+            <ul>
+                <li>Users can create teams or join existing teams</li>
+                <li>Team leaders have team management rights</li>
+                <li>In-team rankings and statistics can be viewed</li>
+                <li>Team names must not contain inappropriate content</li>
+            </ul>
+
+            <h2>10. LEADERBOARD</h2>
+            <ul>
+                <li>Users can appear on the leaderboard according to privacy settings</li>
+                <li>Names shown on the leaderboard may be masked</li>
+                <li>Users detected for fraud are removed from the leaderboard</li>
+            </ul>
+
+            <h2>11. CHANGES</h2>
+            <ul>
+                <li>These terms of use may be changed at any time</li>
+                <li>Significant changes will be notified within the application</li>
+                <li>Continuing to use the application after changes means you accept the new terms</li>
+            </ul>
+
+            <h2>12. APPLICABLE LAW AND JURISDICTION</h2>
+            <ul>
+                <li>This agreement is subject to the laws of the Republic of Turkey</li>
+                <li>Turkish courts have jurisdiction over disputes</li>
+                <li>Consumer rights are reserved</li>
+            </ul>
+
+            <h2>13. SEVERABILITY</h2>
+            <p>If any provision of this agreement is found invalid or unenforceable, it does not affect the validity of other provisions.</p>
+
+            <h2>14. TERMINATION</h2>
+            <ul>
+                <li>Either party may terminate this agreement at any time</li>
+                <li>The user can terminate the agreement by deleting their account</li>
+                <li>OneHopeStep can terminate the agreement by closing the account in case of terms of use violation</li>
+            </ul>
+
+            <h2>15. CONTACT</h2>
+            <div class="contact-box">
+                <p>For your questions or complaints:</p>
+                <p><strong>Email:</strong> <a href="mailto:hopesteps.app@gmail.com">hopesteps.app@gmail.com</a></p>
+            </div>
+
+            <p class="update-date">These terms of service were last updated on December 23, 2025.</p>
+        </div>
+    </div>
+
+    <script>
+        function showLang(lang) {
+            document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.lang-switch button').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById('content-' + lang).classList.add('active');
+            document.getElementById('btn-' + lang).classList.add('active');
+        }
+    </script>
+</body>
+</html>

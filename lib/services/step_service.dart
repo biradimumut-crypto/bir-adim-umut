@@ -1,33 +1,47 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-// Health ve Pedometer geçici olarak devre dışı
-// import 'package:health/health.dart';
-// import 'package:pedometer/pedometer.dart';
 import '../models/daily_step_model.dart';
+import 'health_service.dart';
 
+/// Adım Servisi - Health API entegrasyonu ile
+/// 
+/// Tek koleksiyon yapısı: /users/{uid}/daily_steps/{date}
+/// HealthService ile entegre çalışır
 class StepService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final HealthService _healthService = HealthService();
 
-  // Health plugin geçici olarak devre dışı
-  // final Health _health = Health();
-  // final List<String> permissions = [
-  //   HealthDataType.STEPS.toString(),
-  // ];
+  /// Singleton pattern
+  static final StepService _instance = StepService._internal();
+  factory StepService() => _instance;
+  StepService._internal();
 
-  /// Cihaz adımlarını (Pedometer/Health) gerçek zamanda oku
-  /// MOCK: Geçici olarak boş stream döner
-  Stream<int> getStepsStream() {
-    // return Pedometer.stepCountStream;
-    return Stream.periodic(const Duration(seconds: 5), (count) => count * 100);
+  /// Bugünün tarih anahtarını al
+  String _getTodayKey() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
-  /// Bugünün adımlarını al
-  /// MOCK: Geçici olarak rastgele değer döner
+  /// Cihaz adımlarını gerçek zamanda oku (stream)
+  Stream<int> getStepsStream() {
+    return Stream.periodic(const Duration(seconds: 10), (count) async {
+      final steps = await getTodaySteps();
+      return steps;
+    }).asyncMap((event) => event);
+  }
+
+  /// Bugünün adımlarını al (HealthService'den)
   Future<int> getTodaySteps() async {
     try {
-      // Mock değer - gerçek implementasyon için health paketi gerekli
-      return DateTime.now().millisecond * 10; // Test için rastgele değer
+      // HealthService'i başlat (henüz başlatılmadıysa)
+      if (!_healthService.isAuthorized) {
+        await _healthService.initialize();
+      }
+      
+      // HealthService'den güncel adım sayısını al
+      final steps = await _healthService.fetchTodaySteps();
+      return steps;
     } catch (e) {
       print('Günlük adım al hatası: $e');
       return 0;
@@ -35,12 +49,6 @@ class StepService {
   }
 
   /// Günlük adım verisini Firestore'a senkronize et
-  /// 
-  /// İş Mantığı:
-  /// 1. Bugünün adımlarını cihazdan oku
-  /// 2. Firestore'daki günlük kayıtla karşılaştır
-  /// 3. Yeni veya güncellenmiş veriyi kaydet
-  /// 4. Senkronizasyon zamanını kaydet (cooldown için)
   Future<Map<String, dynamic>> syncTodayStepsToFirestore() async {
     try {
       final userId = _auth.currentUser?.uid;
@@ -48,43 +56,37 @@ class StepService {
         return {'success': false, 'error': 'Kullanıcı oturum açmamış'};
       }
 
-      // Cihazdan bugünün adımlarını al
+      // Health API'den bugünün adımlarını al
       final todaySteps = await getTodaySteps();
+      final today = _getTodayKey();
 
-      // Günlük adım belgesini Firestore'dan al veya oluştur
-      final now = DateTime.now();
-      final dateStr =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      final stepDocId = '$userId-$dateStr';
-
-      final stepDocRef = _firestore.collection('daily_steps').doc(stepDocId);
+      // Kullanıcının daily_steps subcollection'ına yaz
+      final stepDocRef = _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('daily_steps')
+          .doc(today);
+      
       final stepDoc = await stepDocRef.get();
 
-      late int previousSteps;
-      late int convertedSteps;
+      int previousSteps = 0;
+      int convertedSteps = 0;
 
       if (stepDoc.exists) {
         final data = stepDoc.data()!;
-        previousSteps = data['total_steps'] ?? 0;
+        previousSteps = data['daily_steps'] ?? 0;
         convertedSteps = data['converted_steps'] ?? 0;
-      } else {
-        previousSteps = 0;
-        convertedSteps = 0;
       }
 
       // Günlük adım verisi güncelle
       await stepDocRef.set({
-        'user_id': userId,
-        'total_steps': todaySteps,
+        'daily_steps': todaySteps,
         'converted_steps': convertedSteps,
-        'date': Timestamp.fromDate(DateTime(now.year, now.month, now.day)),
-        'is_reset': false,
-        'last_conversion_time': stepDoc.exists
-            ? (stepDoc.data()?['last_conversion_time'] ?? Timestamp.now())
-            : Timestamp.now(),
+        'date': today,
+        'last_sync_time': Timestamp.now(),
       }, SetOptions(merge: true));
 
-      // Kullanıcı'nın last_step_sync_time'ını güncelle
+      // Kullanıcının last_step_sync_time'ını güncelle
       await _firestore.collection('users').doc(userId).update({
         'last_step_sync_time': Timestamp.now(),
       });
@@ -95,11 +97,21 @@ class StepService {
         'convertedSteps': convertedSteps,
         'availableSteps': todaySteps - convertedSteps,
         'stepChange': todaySteps - previousSteps,
+        'isSimulated': _healthService.isUsingSimulatedData,
       };
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  /// Health API kullanılabilir mi?
+  bool get isUsingRealData => !_healthService.isUsingSimulatedData;
+
+  /// Health Connect / HealthKit kurulu mu?
+  Future<bool> isHealthAvailable() => _healthService.isHealthAvailable();
+
+  /// Health Connect'i kur (Android)
+  Future<void> installHealthConnect() => _healthService.installHealthConnect();
 
   /// Bugünün Daily Step modelini al
   Future<DailyStepModel?> getTodayDailyStepModel() async {
@@ -107,15 +119,27 @@ class StepService {
       final userId = _auth.currentUser?.uid;
       if (userId == null) return null;
 
-      final now = DateTime.now();
-      final dateStr =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      final stepDocId = '$userId-$dateStr';
-
-      final doc = await _firestore.collection('daily_steps').doc(stepDocId).get();
+      final today = _getTodayKey();
+      final doc = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('daily_steps')
+          .doc(today)
+          .get();
+      
       if (!doc.exists) return null;
-
-      return DailyStepModel.fromFirestore(doc);
+      
+      final data = doc.data()!;
+      return DailyStepModel(
+        stepId: doc.id,
+        userId: userId,
+        totalSteps: data['daily_steps'] ?? 0,
+        convertedSteps: data['converted_steps'] ?? 0,
+        date: DateTime.now(),
+        isReset: false,
+        lastConversionTime: (data['last_conversion_time'] as Timestamp?)?.toDate() ?? 
+            DateTime.now().subtract(const Duration(minutes: 11)),
+      );
     } catch (e) {
       print('Daily step model al hatası: $e');
       return null;
@@ -128,27 +152,36 @@ class StepService {
       final userId = _auth.currentUser?.uid;
       if (userId == null) return [];
 
+      final List<Map<String, dynamic>> historyList = [];
       final now = DateTime.now();
-      final oneWeekAgo = now.subtract(const Duration(days: 7));
 
-      final snapshot = await _firestore
-          .collection('daily_steps')
-          .where('user_id', isEqualTo: userId)
-          .where('date',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(oneWeekAgo))
-          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(now))
-          .orderBy('date', descending: false)
-          .get();
+      for (int i = 6; i >= 0; i--) {
+        final date = now.subtract(Duration(days: i));
+        final key = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+        
+        try {
+          final doc = await _firestore
+              .collection('users')
+              .doc(userId)
+              .collection('daily_steps')
+              .doc(key)
+              .get();
 
-      final historyList = <Map<String, dynamic>>[];
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        historyList.add({
-          'date': (data['date'] as Timestamp).toDate(),
-          'totalSteps': data['total_steps'] ?? 0,
-          'convertedSteps': data['converted_steps'] ?? 0,
-          'availableSteps': (data['total_steps'] ?? 0) - (data['converted_steps'] ?? 0),
-        });
+          final data = doc.data();
+          historyList.add({
+            'date': date,
+            'totalSteps': data?['daily_steps'] ?? 0,
+            'convertedSteps': data?['converted_steps'] ?? 0,
+            'availableSteps': (data?['daily_steps'] ?? 0) - (data?['converted_steps'] ?? 0),
+          });
+        } catch (e) {
+          historyList.add({
+            'date': date,
+            'totalSteps': 0,
+            'convertedSteps': 0,
+            'availableSteps': 0,
+          });
+        }
       }
 
       return historyList;
@@ -159,7 +192,7 @@ class StepService {
   }
 
   /// Aylık adım istatistiklerini al
-  Future<Map<String, dynamic>> getMonthlyStatstics({
+  Future<Map<String, dynamic>> getMonthlyStatistics({
     required int year,
     required int month,
   }) async {
@@ -167,28 +200,37 @@ class StepService {
       final userId = _auth.currentUser?.uid;
       if (userId == null) return {};
 
-      final firstDay = DateTime(year, month, 1);
-      final lastDay = month == 12
-          ? DateTime(year + 1, 1, 1).subtract(const Duration(days: 1))
-          : DateTime(year, month + 1, 1).subtract(const Duration(days: 1));
-
-      final snapshot = await _firestore
-          .collection('daily_steps')
-          .where('user_id', isEqualTo: userId)
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(firstDay))
-          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(lastDay))
-          .get();
-
       int totalSteps = 0;
       int totalConverted = 0;
       int daysWithSteps = 0;
 
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        totalSteps += data['total_steps'] ?? 0;
-        totalConverted += data['converted_steps'] ?? 0;
-        if ((data['total_steps'] ?? 0) > 0) {
-          daysWithSteps++;
+      final lastDay = DateTime(year, month + 1, 0);
+
+      for (int day = 1; day <= lastDay.day; day++) {
+        final date = DateTime(year, month, day);
+        if (date.isAfter(DateTime.now())) break;
+        
+        final key = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+        
+        try {
+          final doc = await _firestore
+              .collection('users')
+              .doc(userId)
+              .collection('daily_steps')
+              .doc(key)
+              .get();
+
+          if (doc.exists) {
+            final data = doc.data()!;
+            final steps = data['daily_steps'] ?? 0;
+            final converted = data['converted_steps'] ?? 0;
+            
+            totalSteps += (steps as num).toInt();
+            totalConverted += (converted as num).toInt();
+            if (steps > 0) daysWithSteps++;
+          }
+        } catch (e) {
+          // Veri yok, devam et
         }
       }
 
@@ -207,43 +249,6 @@ class StepService {
     }
   }
 
-  /// Gece 00:00'de adımları sıfırla (Scheduled Cloud Function)
-  /// Bu fonksiyon Cloud Functions'ta günlük çalıştırılmalı
-  Future<void> resetDailySteps() async {
-    try {
-      final userId = _auth.currentUser?.uid;
-      if (userId == null) return;
-
-      final yesterday = DateTime.now().subtract(const Duration(days: 1));
-      final dateStr =
-          '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
-      final stepDocId = '$userId-$dateStr';
-
-      // Dünün adım belgesini al
-      final yesterdayDoc =
-          await _firestore.collection('daily_steps').doc(stepDocId).get();
-
-      if (yesterdayDoc.exists) {
-        // Bugün için yeni belge oluştur (sıfırlanmış)
-        final today = DateTime.now();
-        final todayStr =
-            '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-        final todayDocId = '$userId-$todayStr';
-
-        await _firestore.collection('daily_steps').doc(todayDocId).set({
-          'user_id': userId,
-          'total_steps': 0,
-          'converted_steps': 0,
-          'date': Timestamp.fromDate(DateTime(today.year, today.month, today.day)),
-          'is_reset': true,
-          'last_conversion_time': Timestamp.now(),
-        });
-      }
-    } catch (e) {
-      print('Günlük sıfırlama hatası: $e');
-    }
-  }
-
   /// Cooldown kontrolü (10 dakika)
   Future<bool> canConvertSteps() async {
     try {
@@ -252,7 +257,7 @@ class StepService {
       return todayModel.canConvertSteps();
     } catch (e) {
       print('Cooldown kontrol hatası: $e');
-      return false;
+      return true;
     }
   }
 

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import '../../providers/language_provider.dart';
+import '../../widgets/banner_ad_widget.dart';
+import '../../services/local_notification_service.dart';
 
 /// Leaderboard Ekranı - 3 Tab: Adım Şampiyonları, Umut Olanlar, Takımlar
 /// Her kategoride sadece ilk 3 gösterilir (Altın, Gümüş, Bronz)
@@ -14,7 +19,7 @@ class LeaderboardScreen extends StatefulWidget {
 }
 
 class _LeaderboardScreenState extends State<LeaderboardScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -33,6 +38,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 3, vsync: this);
     _loadAllData();
     
@@ -44,9 +50,19 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tabController.dispose();
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  /// Uygulama arka plandan döndüğünde otomatik yenile
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('📱 LeaderboardScreen resumed - refreshing data...');
+      _loadAllData();
+    }
   }
 
   /// Tüm verileri yükle
@@ -75,61 +91,91 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     return DateTime(now.year, now.month, 1);
   }
 
-  /// Tab 1: Adım Şampiyonları - Bu ay en çok adım dönüştürenler
+  /// Tab 1: Adım Şampiyonları - Bu ay en çok GERÇEK adım dönüştürenler
+  /// Sadece: step_conversion, step_conversion_2x, carryover_conversion
+  /// Dahil DEĞİL: bonus_conversion (referral), reward_ad_bonus, leaderboard_bonus
   Future<void> _loadConverters() async {
     if (!mounted) return;
     setState(() => _isLoadingConverters = true);
 
     try {
-      final now = DateTime.now();
-      final usersSnapshot = await _firestore.collection('users').get();
+      final monthStart = _getMonthStart();
       
-      List<Map<String, dynamic>> userSteps = [];
+      // Sadece gerçek adım dönüşümlerini say (bonus hariç)
+      final validActivityTypes = [
+        'step_conversion',      // Günlük adım dönüşümü
+        'step_conversion_2x',   // Progress bar 2x bonus
+        'carryover_conversion', // Taşınan adım dönüşümü
+      ];
       
-      for (var userDoc in usersSnapshot.docs) {
-        final uid = userDoc.id;
-        final userData = userDoc.data();
-        int totalConvertedThisMonth = 0;
-        
-        // Bu kullanıcının bu ayki daily_steps verilerini al
-        final stepsSnapshot = await _firestore
-            .collection('users')
-            .doc(uid)
-            .collection('daily_steps')
+      // Kullanıcı başına toplam adım hesapla
+      final Map<String, int> userSteps = {};
+      
+      for (final activityType in validActivityTypes) {
+        final logsSnapshot = await _firestore
+            .collection('activity_logs')
+            .where('activity_type', isEqualTo: activityType)
             .get();
         
-        for (var stepDoc in stepsSnapshot.docs) {
-          final dateKey = stepDoc.id;
+        for (var doc in logsSnapshot.docs) {
+          final data = doc.data();
+          
           // Tarih kontrolü - bu ay mı?
-          try {
-            final parts = dateKey.split('-');
-            if (parts.length == 3) {
-              final year = int.parse(parts[0]);
-              final month = int.parse(parts[1]);
-              
-              if (year == now.year && month == now.month) {
-                final data = stepDoc.data();
-                totalConvertedThisMonth += (data['converted_steps'] ?? 0) as int;
-              }
-            }
-          } catch (_) {}
-        }
-        
-        if (totalConvertedThisMonth > 0) {
-          userSteps.add({
-            'uid': uid,
-            'name': userData['full_name'] ?? 'Kullanıcı',
-            'value': totalConvertedThisMonth,
-          });
+          DateTime? logDate;
+          if (data['created_at'] != null) {
+            logDate = (data['created_at'] as Timestamp).toDate();
+          } else if (data['timestamp'] != null) {
+            logDate = (data['timestamp'] as Timestamp).toDate();
+          }
+          
+          if (logDate == null || logDate.isBefore(monthStart)) continue;
+          
+          final uid = data['user_id'] ?? '';
+          final steps = (data['steps_converted'] ?? 0) as int;
+          
+          if (uid.isNotEmpty && steps > 0) {
+            userSteps[uid] = (userSteps[uid] ?? 0) + steps;
+          }
         }
       }
       
+      // Kullanıcı isimlerini al
+      List<Map<String, dynamic>> userStepsList = [];
+      
+      for (var entry in userSteps.entries) {
+        final uid = entry.key;
+        final steps = entry.value;
+        
+        String userName = 'Kullanıcı';
+        String? photoUrl;
+        try {
+          final userDoc = await _firestore.collection('users').doc(uid).get();
+          if (userDoc.exists) {
+            userName = userDoc.data()?['full_name'] ?? 'Kullanıcı';
+            photoUrl = userDoc.data()?['profile_image_url'];
+          }
+        } catch (_) {}
+        
+        userStepsList.add({
+          'uid': uid,
+          'name': userName,
+          'value': steps,
+          'photoUrl': photoUrl,
+        });
+      }
+      
       // Sırala ve ilk 3'ü al
-      userSteps.sort((a, b) => (b['value'] as int).compareTo(a['value'] as int));
+      userStepsList.sort((a, b) => (b['value'] as int).compareTo(a['value'] as int));
+      
+      // Kullanıcının sıralamasını kontrol et ve bildirim gönder
+      final currentUid = _auth.currentUser?.uid;
+      if (currentUid != null) {
+        await _checkStepRankingNotification(userStepsList, currentUid);
+      }
       
       if (mounted) {
         setState(() {
-          _converters = userSteps.take(3).toList();
+          _converters = userStepsList.take(3).toList();
           _isLoadingConverters = false;
         });
       }
@@ -149,15 +195,30 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     try {
       final monthStart = _getMonthStart();
       
-      final logsSnapshot = await _firestore
+      // Eski ve yeni formatları destekle
+      final logsSnapshot1 = await _firestore
           .collection('activity_logs')
           .where('activity_type', isEqualTo: 'donation')
           .get();
+      
+      final logsSnapshot2 = await _firestore
+          .collection('activity_logs')
+          .where('action_type', isEqualTo: 'donation')
+          .get();
+      
+      // Birleştir ve duplicate kaldır
+      final allDocs = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+      for (var doc in logsSnapshot1.docs) {
+        allDocs[doc.id] = doc;
+      }
+      for (var doc in logsSnapshot2.docs) {
+        allDocs[doc.id] = doc;
+      }
 
       // Kullanıcı başına toplam bağış hesapla
       final Map<String, double> userDonations = {};
 
-      for (var doc in logsSnapshot.docs) {
+      for (var doc in allDocs.values) {
         final data = doc.data();
         
         // Tarih kontrolü - bu ay mı?
@@ -171,7 +232,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         if (logDate == null || logDate.isBefore(monthStart)) continue;
         
         final uid = data['user_id'] ?? '';
-        final amount = (data['amount'] ?? 0).toDouble();
+        // Hem amount hem hope_amount kontrol et
+        final amount = (data['amount'] ?? data['hope_amount'] ?? 0).toDouble();
 
         if (uid.isNotEmpty) {
           userDonations[uid] = (userDonations[uid] ?? 0) + amount;
@@ -185,12 +247,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         final uid = entry.key;
         final amount = entry.value;
         
-        // Kullanıcı adını Firestore'dan al
+        // Kullanıcı adını ve fotoğrafını Firestore'dan al
         String userName = 'Kullanıcı';
+        String? photoUrl;
         try {
           final userDoc = await _firestore.collection('users').doc(uid).get();
           if (userDoc.exists) {
             userName = userDoc.data()?['full_name'] ?? 'Kullanıcı';
+            photoUrl = userDoc.data()?['profile_image_url'];
           }
         } catch (_) {}
         
@@ -198,11 +262,22 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           'uid': uid,
           'name': userName,
           'value': amount,
+          'photoUrl': photoUrl,
         });
       }
 
-      // Sırala ve ilk 3'ü al
-      donatorsList.sort((a, b) => (b['value'] as double).compareTo(a['value'] as double));
+      // Sırala - eşit puanlarda UID'ye göre sırala (tutarlılık için)
+      donatorsList.sort((a, b) {
+        final valueDiff = (b['value'] as double).compareTo(a['value'] as double);
+        if (valueDiff != 0) return valueDiff;
+        return (a['uid'] as String).compareTo(b['uid'] as String);
+      });
+      
+      // Kullanıcının sıralamasını kontrol et ve bildirim gönder
+      final currentUid = _auth.currentUser?.uid;
+      if (currentUid != null) {
+        await _checkDonationRankingNotification(donatorsList, currentUid);
+      }
       
       if (mounted) {
         setState(() {
@@ -236,6 +311,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       final Map<String, double> teamDonations = {};
       final Map<String, String> teamNames = {};
       final Map<String, int> teamMemberCounts = {};
+      final Map<String, String?> teamPhotos = {};
 
       for (var doc in logsSnapshot.docs) {
         final data = doc.data();
@@ -269,6 +345,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 if (teamDoc.exists) {
                   teamNames[teamId] = teamDoc.data()?['name'] ?? 'Takım';
                   teamMemberCounts[teamId] = teamDoc.data()?['members_count'] ?? 0;
+                  teamPhotos[teamId] = teamDoc.data()?['logo_url'];
                 }
               }
             }
@@ -285,11 +362,18 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           'name': teamNames[entry.key] ?? 'Takım',
           'value': entry.value,
           'membersCount': teamMemberCounts[entry.key] ?? 0,
+          'photoUrl': teamPhotos[entry.key],
         });
       }
 
       // Sırala ve ilk 3'ü al
       teamsList.sort((a, b) => (b['value'] as double).compareTo(a['value'] as double));
+      
+      // Kullanıcının takımının sıralamasını kontrol et ve bildirim gönder
+      final currentUid = _auth.currentUser?.uid;
+      if (currentUid != null) {
+        await _checkTeamRankingNotification(teamsList, currentUid);
+      }
       
       if (mounted) {
         setState(() {
@@ -304,9 +388,74 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       }
     }
   }
+  
+  /// Adım sıralaması bildirimi kontrol
+  Future<void> _checkStepRankingNotification(List<Map<String, dynamic>> rankings, String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final notificationService = LocalNotificationService();
+    
+    // İlk 3'te mi?
+    final userRank = rankings.indexWhere((r) => r['uid'] == uid);
+    if (userRank >= 0 && userRank < 3) {
+      final notifKey = 'step_rank_notif_${userRank + 1}_$today';
+      final alreadySent = prefs.getBool(notifKey) ?? false;
+      
+      if (!alreadySent) {
+        await notificationService.showStepRankingNotification(userRank + 1);
+        await prefs.setBool(notifKey, true);
+      }
+    }
+  }
+  
+  /// Bağış sıralaması bildirimi kontrol
+  Future<void> _checkDonationRankingNotification(List<Map<String, dynamic>> rankings, String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final notificationService = LocalNotificationService();
+    
+    final userRank = rankings.indexWhere((r) => r['uid'] == uid);
+    if (userRank >= 0 && userRank < 3) {
+      final notifKey = 'donation_rank_notif_${userRank + 1}_$today';
+      final alreadySent = prefs.getBool(notifKey) ?? false;
+      
+      if (!alreadySent) {
+        await notificationService.showDonationRankingNotification(userRank + 1);
+        await prefs.setBool(notifKey, true);
+      }
+    }
+  }
+  
+  /// Takım sıralaması bildirimi kontrol
+  Future<void> _checkTeamRankingNotification(List<Map<String, dynamic>> teamRankings, String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final notificationService = LocalNotificationService();
+    
+    // Kullanıcının takımını bul
+    try {
+      final userDoc = await _firestore.collection('users').doc(uid).get();
+      final teamId = userDoc.data()?['current_team_id'];
+      
+      if (teamId == null || teamId.isEmpty) return;
+      
+      final teamRank = teamRankings.indexWhere((t) => t['uid'] == teamId);
+      if (teamRank >= 0 && teamRank < 3) {
+        final teamName = teamRankings[teamRank]['name'] ?? 'Takımın';
+        final notifKey = 'team_rank_notif_${teamRank + 1}_$today';
+        final alreadySent = prefs.getBool(notifKey) ?? false;
+        
+        if (!alreadySent) {
+          await notificationService.showTeamRankingNotification(teamName, teamRank + 1);
+          await prefs.setBool(notifKey, true);
+        }
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>();
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _loadAllData,
@@ -318,13 +467,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Sıralama',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                  Text(
+                    lang.leaderboardScreenTitle,
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Bu ayın en iyileri! 🏆',
+                    lang.thisMonthsBest,
                     style: TextStyle(color: Colors.grey[600]),
                   ),
                 ],
@@ -353,13 +502,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 ),
                 indicatorSize: TabBarIndicatorSize.tab,
                 indicatorPadding: const EdgeInsets.all(4),
-                labelColor: Colors.blue[700],
+                labelColor: const Color(0xFFE07A5F),
                 unselectedLabelColor: Colors.grey[600],
                 labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
-                tabs: const [
-                  Tab(text: 'Adım Şampiyonları'),
-                  Tab(text: 'Umut Olanlar'),
-                  Tab(text: 'Takımlar'),
+                tabs: [
+                  Tab(text: lang.stepChampionsTab),
+                  Tab(text: lang.hopeHeroesTab),
+                  Tab(text: lang.teamsTab),
                 ],
               ),
             ),
@@ -385,48 +534,51 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
   /// Tab 1: Adım Şampiyonları
   Widget _buildConvertersTab() {
+    final lang = context.read<LanguageProvider>();
     if (_isLoadingConverters) {
       return const Center(child: CircularProgressIndicator());
     }
 
     if (_converters.isEmpty) {
-      return _buildEmptyState('Bu ay henüz adım dönüştüren yok');
+      return _buildEmptyState(lang.noConvertersYet);
     }
 
     return _buildPodiumView(
       users: _converters,
-      valueLabel: 'adım',
-      color: Colors.blue,
+      valueLabel: lang.stepsLabel,
+      color: const Color(0xFF6EC6B5),
       icon: Icons.directions_walk,
     );
   }
 
   /// Tab 2: Umut Olanlar
   Widget _buildDonatorsTab() {
+    final lang = context.read<LanguageProvider>();
     if (_isLoadingDonators) {
       return const Center(child: CircularProgressIndicator());
     }
 
     if (_donators.isEmpty) {
-      return _buildEmptyState('Bu ay henüz bağış yapılmamış');
+      return _buildEmptyState(lang.noDonationsYet);
     }
 
     return _buildPodiumView(
       users: _donators,
       valueLabel: 'Hope',
-      color: Colors.purple,
+      color: const Color(0xFFE07A5F),
       icon: Icons.favorite,
     );
   }
 
   /// Tab 3: Takımlar
   Widget _buildTeamsTab() {
+    final lang = context.read<LanguageProvider>();
     if (_isLoadingTeams) {
       return const Center(child: CircularProgressIndicator());
     }
 
     if (_teams.isEmpty) {
-      return _buildEmptyState('Bu ay henüz takım bağışı yok');
+      return _buildEmptyState(lang.noTeamDonationsYet);
     }
 
     return _buildTeamPodiumView(_teams);
@@ -439,6 +591,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     required Color color,
     required IconData icon,
   }) {
+    final lang = context.read<LanguageProvider>();
     final currentUid = _auth.currentUser?.uid;
 
     return SingleChildScrollView(
@@ -464,6 +617,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                   height: 100,
                   icon: icon,
                   isCurrentUser: users[1]['uid'] == currentUid,
+                  photoUrl: users[1]['photoUrl'],
                 )
               else
                 _buildEmptyPodiumItem(rank: 2, height: 100),
@@ -477,10 +631,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                   name: _maskName(users[0]['name']),
                   value: _formatValue(users[0]['value']),
                   valueLabel: valueLabel,
-                  color: Colors.amber,
+                  color: const Color(0xFFF2C94C),
                   height: 130,
                   icon: icon,
                   isCurrentUser: users[0]['uid'] == currentUid,
+                  photoUrl: users[0]['photoUrl'],
                 )
               else
                 _buildEmptyPodiumItem(rank: 1, height: 130),
@@ -498,6 +653,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                   height: 80,
                   icon: icon,
                   isCurrentUser: users[2]['uid'] == currentUid,
+                  photoUrl: users[2]['photoUrl'],
                 )
               else
                 _buildEmptyPodiumItem(rank: 3, height: 80),
@@ -519,7 +675,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 Icon(Icons.calendar_month, size: 16, color: Colors.grey[600]),
                 const SizedBox(width: 8),
                 Text(
-                  _getCurrentMonthName(),
+                  _getCurrentMonthName(lang),
                   style: TextStyle(
                     color: Colors.grey[700],
                     fontWeight: FontWeight.w500,
@@ -533,12 +689,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           
           // Açıklama
           Text(
-            'Sıralama her ayın başında sıfırlanır',
+            lang.rankingResetsMonthly,
             style: TextStyle(
               color: Colors.grey[500],
               fontSize: 12,
             ),
           ),
+          
+          const SizedBox(height: 16),
+          const BannerAdWidget(), // Reklam Alanı
         ],
       ),
     );
@@ -546,6 +705,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
   /// Takım podyum görünümü
   Widget _buildTeamPodiumView(List<Map<String, dynamic>> teams) {
+    final lang = context.read<LanguageProvider>();
     return FutureBuilder<String?>(
       future: _getCurrentUserTeamId(),
       builder: (context, snapshot) {
@@ -573,6 +733,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                       color: Colors.grey[400]!,
                       height: 100,
                       isCurrentTeam: teams[1]['uid'] == currentTeamId,
+                      photoUrl: teams[1]['photoUrl'],
                     )
                   else
                     _buildEmptyPodiumItem(rank: 2, height: 100),
@@ -586,9 +747,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                       name: teams[0]['name'],
                       value: (teams[0]['value'] as num).toDouble(),
                       membersCount: teams[0]['membersCount'] ?? 0,
-                      color: Colors.amber,
+                      color: const Color(0xFFF2C94C),
                       height: 130,
                       isCurrentTeam: teams[0]['uid'] == currentTeamId,
+                      photoUrl: teams[0]['photoUrl'],
                     )
                   else
                     _buildEmptyPodiumItem(rank: 1, height: 130),
@@ -605,6 +767,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                       color: Colors.brown[400]!,
                       height: 80,
                       isCurrentTeam: teams[2]['uid'] == currentTeamId,
+                      photoUrl: teams[2]['photoUrl'],
                     )
                   else
                     _buildEmptyPodiumItem(rank: 3, height: 80),
@@ -626,7 +789,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                     Icon(Icons.calendar_month, size: 16, color: Colors.grey[600]),
                     const SizedBox(width: 8),
                     Text(
-                      _getCurrentMonthName(),
+                      _getCurrentMonthName(lang),
                       style: TextStyle(
                         color: Colors.grey[700],
                         fontWeight: FontWeight.w500,
@@ -640,12 +803,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               
               // Açıklama
               Text(
-                'Sıralama her ayın başında sıfırlanır',
+                lang.rankingResetsMonthly,
                 style: TextStyle(
                   color: Colors.grey[500],
                   fontSize: 12,
                 ),
               ),
+              
+              const SizedBox(height: 16),
+              const BannerAdWidget(), // Reklam Alanı
             ],
           ),
         );
@@ -674,6 +840,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     required double height,
     required IconData icon,
     required bool isCurrentUser,
+    String? photoUrl,
   }) {
     final medals = ['🥇', '🥈', '🥉'];
     
@@ -686,12 +853,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         ),
         const SizedBox(height: 8),
         
-        // Avatar
+        // Avatar - Profil fotoğrafı ile
         Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
-              color: isCurrentUser ? Colors.blue : color,
+              color: isCurrentUser ? const Color(0xFF6EC6B5) : color,
               width: 3,
             ),
             boxShadow: [
@@ -705,11 +872,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           child: CircleAvatar(
             radius: rank == 1 ? 35 : 28,
             backgroundColor: color.withOpacity(0.2),
-            child: Icon(
-              Icons.person,
-              size: rank == 1 ? 35 : 28,
-              color: color,
-            ),
+            backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+            child: photoUrl == null
+                ? Icon(
+                    Icons.person,
+                    size: rank == 1 ? 35 : 28,
+                    color: color,
+                  )
+                : null,
           ),
         ),
         const SizedBox(height: 8),
@@ -723,7 +893,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: rank == 1 ? 13 : 11,
-              color: isCurrentUser ? Colors.blue[700] : Colors.black87,
+              color: isCurrentUser ? const Color(0xFFE07A5F) : Colors.black87,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -735,16 +905,21 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             margin: const EdgeInsets.only(top: 4),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.blue,
+              color: const Color(0xFF6EC6B5),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Text(
-              'Sen',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
+            child: Builder(
+              builder: (context) {
+                final lang = context.read<LanguageProvider>();
+                return Text(
+                  lang.youIndicator,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              },
             ),
           ),
         
@@ -805,6 +980,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     required Color color,
     required double height,
     required bool isCurrentTeam,
+    String? photoUrl,
   }) {
     final medals = ['🥇', '🥈', '🥉'];
     
@@ -817,16 +993,18 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         ),
         const SizedBox(height: 8),
         
-        // Logo
+        // Logo - Takım fotoğrafı ile
         Container(
           width: rank == 1 ? 70 : 56,
           height: rank == 1 ? 70 : 56,
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.blue[400]!, Colors.blue[700]!],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            gradient: photoUrl == null 
+                ? LinearGradient(
+                    colors: [const Color(0xFF6EC6B5), const Color(0xFFE07A5F)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isCurrentTeam ? Colors.green : color,
@@ -839,17 +1017,25 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 offset: const Offset(0, 4),
               ),
             ],
+            image: photoUrl != null 
+                ? DecorationImage(
+                    image: NetworkImage(photoUrl),
+                    fit: BoxFit.cover,
+                  )
+                : null,
           ),
-          child: Center(
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : 'T',
-              style: TextStyle(
-                fontSize: rank == 1 ? 28 : 22,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ),
+          child: photoUrl == null 
+              ? Center(
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : 'T',
+                    style: TextStyle(
+                      fontSize: rank == 1 ? 28 : 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                )
+              : null,
         ),
         const SizedBox(height: 8),
         
@@ -877,13 +1063,18 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               color: Colors.green,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Text(
-              'Takımın',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
+            child: Builder(
+              builder: (context) {
+                final lang = context.read<LanguageProvider>();
+                return Text(
+                  lang.yourTeamIndicator,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              },
             ),
           ),
         
@@ -929,12 +1120,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                '$membersCount üye',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 10,
-                ),
+              Builder(
+                builder: (context) {
+                  final lang = context.read<LanguageProvider>();
+                  return Text(
+                    lang.membersUnit(membersCount),
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 10,
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -966,13 +1162,18 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         const SizedBox(height: 8),
         SizedBox(
           width: 100,
-          child: Text(
-            'Boş',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.grey[400],
-              fontSize: rank == 1 ? 13 : 11,
-            ),
+          child: Builder(
+            builder: (context) {
+              final lang = context.read<LanguageProvider>();
+              return Text(
+                lang.emptyPodium,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: rank == 1 ? 13 : 11,
+                ),
+              );
+            },
           ),
         ),
         const SizedBox(height: 8),
@@ -1013,16 +1214,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   }
 
   /// Mevcut ayın adını al
-  String _getCurrentMonthName() {
-    final months = [
-      'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
-      'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
-    ];
+  String _getCurrentMonthName(LanguageProvider lang) {
     final now = DateTime.now();
-    return '${months[now.month - 1]} ${now.year}';
+    return '${lang.getMonthName(now.month)} ${now.year}';
   }
 
   Widget _buildEmptyState(String message) {
+    final lang = context.read<LanguageProvider>();
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       child: SizedBox(
@@ -1039,9 +1237,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               ),
               const SizedBox(height: 8),
               Text(
-                'İlk sen ol! 🚀',
+                lang.beTheFirst,
                 style: TextStyle(
-                  color: Colors.blue[400],
+                  color: const Color(0xFF6EC6B5),
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
@@ -1060,7 +1258,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                     Icon(Icons.calendar_month, size: 16, color: Colors.grey[600]),
                     const SizedBox(width: 8),
                     Text(
-                      _getCurrentMonthName(),
+                      _getCurrentMonthName(lang),
                       style: TextStyle(
                         color: Colors.grey[700],
                         fontWeight: FontWeight.w500,

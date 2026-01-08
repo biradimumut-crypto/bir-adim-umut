@@ -1,12 +1,78 @@
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/sign_up_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/splash/splash_screen.dart';
 import 'screens/notifications/notifications_page.dart';
+import 'screens/admin/admin_panel_screen.dart';
+import 'providers/language_provider.dart';
+import 'services/notification_service.dart';
+import 'services/permission_service.dart';
+import 'services/connectivity_service.dart';
+import 'services/local_notification_service.dart';
+import 'services/badge_service.dart';
+import 'services/interstitial_ad_service.dart';
+import 'services/rewarded_ad_service.dart';
+import 'services/session_service.dart';
+import 'services/health_service.dart';
+
+/// Light Theme
+ThemeData lightTheme() {
+  return ThemeData(
+    brightness: Brightness.light,
+    primaryColor: const Color(0xFF6EC6B5),
+    colorScheme: ColorScheme.light(
+      primary: const Color(0xFF6EC6B5),
+      secondary: const Color(0xFFE07A5F),
+      tertiary: const Color(0xFFF2C94C),
+    ),
+    scaffoldBackgroundColor: Colors.grey[50],
+    textTheme: GoogleFonts.poppinsTextTheme(),
+    appBarTheme: AppBarTheme(
+      backgroundColor: Colors.white,
+      foregroundColor: Colors.black,
+      elevation: 0,
+    ),
+    cardTheme: CardTheme(
+      color: Colors.white,
+      elevation: 2,
+    ),
+  );
+}
+
+/// Dark Theme
+ThemeData darkTheme() {
+  return ThemeData(
+    brightness: Brightness.dark,
+    primaryColor: const Color(0xFF6EC6B5),
+    colorScheme: ColorScheme.dark(
+      primary: const Color(0xFF6EC6B5),
+      secondary: const Color(0xFFE07A5F),
+      tertiary: const Color(0xFFF2C94C),
+    ),
+    scaffoldBackgroundColor: const Color(0xFF121212),
+    textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Color(0xFF1E1E1E),
+      foregroundColor: Colors.white,
+      elevation: 0,
+    ),
+    cardTheme: const CardTheme(
+      color: Color(0xFF1E1E1E),
+      elevation: 2,
+    ),
+  );
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,169 +83,178 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     print('Firebase başarıyla başlatıldı!');
+    
+    // Firestore Offline Persistence (varsayılan olarak açık, ama ayarları optimize edelim)
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+    print('Firestore offline cache aktif!');
+    
+    // App Check başlat (güvenlik için) - Web'de devre dışı bırak
+    if (!kIsWeb) {
+      try {
+        await FirebaseAppCheck.instance.activate(
+          appleProvider: AppleProvider.debug, // Debug modda
+          androidProvider: AndroidProvider.debug, // Debug modda
+        );
+        print('App Check başarıyla başlatıldı!');
+      } catch (e) {
+        print('App Check başlatılamadı (devam ediliyor): $e');
+      }
+    } else {
+      print('Web modda App Check devre dışı');
+    }
+    
+    // Push Notification background handler
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    
+    // Push Notification'ları başlat
+    final notificationService = NotificationService();
+    await notificationService.initializePushNotifications();
+    
+    // Local Notification'ları başlat
+    final localNotifications = LocalNotificationService();
+    await localNotifications.initialize();
+    await localNotifications.scheduleAllDailyNotifications();
+    print('Local bildirimler başlatıldı!');
+    
+    // AdMob başlat
+    await MobileAds.instance.initialize();
+    print('AdMob başarıyla başlatıldı!');
+    
+    // Interstitial ve Rewarded reklamları önceden yükle
+    InterstitialAdService.instance.loadAd();
+    RewardedAdService.instance.loadAd();
+    print('Reklam servisleri başlatıldı!');
+    
+    // Connectivity monitoring başlat
+    ConnectivityService().startMonitoring();
+    print('Bağlantı izleme başlatıldı!');
+    
+    // 🎖️ Login streak ve rozet kontrolü (kullanıcı giriş yapmışsa)
+    try {
+      final badgeService = BadgeService();
+      await badgeService.updateLoginStreak();
+      await badgeService.checkAllBadges();
+      print('Rozet sistemi kontrol edildi!');
+    } catch (e) {
+      print('Rozet sistemi başlatılamadı (kullanıcı giriş yapmamış olabilir): $e');
+    }
+    
+    // 📊 Session takibi başlat (kullanıcı giriş yapmışsa)
+    try {
+      final sessionService = SessionService();
+      await sessionService.startSession();
+      print('Session takibi başlatıldı!');
+    } catch (e) {
+      print('Session takibi başlatılamadı: $e');
+    }
+    
+    // 🏃 Health API başlat (Apple Health / Health Connect)
+    if (!kIsWeb) {
+      try {
+        final healthService = HealthService();
+        await healthService.initialize();
+        print('Health API başlatıldı! (Simüle: ${healthService.isUsingSimulatedData})');
+      } catch (e) {
+        print('Health API başlatılamadı: $e');
+      }
+    }
+    
   } catch (e) {
-    print('Firebase başlatma hatası: $e');
+    print('Başlatma hatası: $e');
   }
   
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LanguageProvider()),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
+/// Global navigator key
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+class MyApp extends StatefulWidget {
   const MyApp({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    // Sans-serif (Roboto) Typography Teması - KALINCA VERSION
-    final textTheme = GoogleFonts.robotoTextTheme(
-      Theme.of(context).textTheme,
-    ).copyWith(
-      // Başlık 1 - 32dp - ÇOOOK KALINCA
-      headlineLarge: GoogleFonts.roboto(
-        fontSize: 32,
-        fontWeight: FontWeight.w900,
-        letterSpacing: 0.0,
-      ),
-      // Başlık 2 - 28dp - ÇOK KALINCA
-      headlineMedium: GoogleFonts.roboto(
-        fontSize: 28,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 0.0,
-      ),
-      // Başlık 3 - 24dp - KALINCA
-      headlineSmall: GoogleFonts.roboto(
-        fontSize: 24,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.0,
-      ),
-      // Başlık 4 - 20dp (Body çok büyük) - KALINCA
-      titleLarge: GoogleFonts.roboto(
-        fontSize: 20,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.15,
-      ),
-      // Başlık 5 - 16dp - KALINCA
-      titleMedium: GoogleFonts.roboto(
-        fontSize: 16,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.1,
-      ),
-      // Başlık 6 - 14dp - KALINCA
-      titleSmall: GoogleFonts.roboto(
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.1,
-      ),
-      // Body Büyük - 18dp - KALINCA
-      bodyLarge: GoogleFonts.roboto(
-        fontSize: 18,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.5,
-        height: 1.5,
-      ),
-      // Body Orta - 16dp - KALINCA
-      bodyMedium: GoogleFonts.roboto(
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.25,
-        height: 1.5,
-      ),
-      // Body Küçük - 14dp - KALINCA
-      bodySmall: GoogleFonts.roboto(
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-        letterSpacing: 0.4,
-        height: 1.4,
-      ),
-      // Label Büyük - 16dp (Buton) - KALINCA
-      labelLarge: GoogleFonts.roboto(
-        fontSize: 16,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.1,
-      ),
-      // Label Orta - 14dp - KALINCA
-      labelMedium: GoogleFonts.roboto(
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.5,
-      ),
-      // Label Küçük - 12dp - KALINCA
-      labelSmall: GoogleFonts.roboto(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.5,
-      ),
-      // Display Büyük - 57dp (Splash, Banner) - ÇOOOOK KALINCA
-      displayLarge: GoogleFonts.roboto(
-        fontSize: 57,
-        fontWeight: FontWeight.w900,
-        letterSpacing: 0.0,
-      ),
-      // Display Orta - 45dp - ÇOK KALINCA
-      displayMedium: GoogleFonts.roboto(
-        fontSize: 45,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 0.0,
-      ),
-      // Display Küçük - 36dp - KALINCA
-      displaySmall: GoogleFonts.roboto(
-        fontSize: 36,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.0,
-      ),
-    );
+  State<MyApp> createState() => _MyAppState();
+}
 
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  final SessionService _sessionService = SessionService();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    switch (state) {
+      case AppLifecycleState.resumed:
+        // Uygulama ön plana geldi - session heartbeat
+        _sessionService.heartbeat();
+        debugPrint('📱 App resumed - heartbeat sent');
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+      case AppLifecycleState.inactive:
+        // Uygulama arka plana alındı veya kapatıldı - session sonlandır
+        _sessionService.endSession();
+        debugPrint('📱 App paused/inactive - session ended');
+        break;
+      case AppLifecycleState.hidden:
+        // iOS'ta uygulama gizlendi
+        break;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Navigator key'i BadgeService'e bağla
+    BadgeService.navigatorKey = navigatorKey;
+    
     return MaterialApp(
-      title: 'Bir Adım Umut',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-        textTheme: textTheme,
-        appBarTheme: AppBarTheme(
-          elevation: 0,
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          titleTextStyle: GoogleFonts.roboto(
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            color: Colors.black,
-          ),
-        ),
-        // Buton temaları
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            textStyle: GoogleFonts.roboto(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            textStyle: GoogleFonts.roboto(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        textTheme: GoogleFonts.robotoTextTheme(
-          ThemeData.dark().textTheme,
-        ),
-      ),
-      themeMode: ThemeMode.light,
-      home: const SplashScreen(),
-      routes: {
-        '/splash': (context) => const SplashScreen(),
-        '/login': (context) => const LoginScreen(),
-        '/dashboard': (context) => const DashboardScreen(),
-        '/sign-up': (context) => const SignUpScreen(),
-        '/notifications': (context) => const NotificationsPage(),
-      },
-    );
+          navigatorKey: navigatorKey,
+          title: 'OneHopeStep',
+          debugShowCheckedModeBanner: false,
+          theme: lightTheme(),
+          // Türkçe dil desteği
+          locale: const Locale('tr', 'TR'),
+          supportedLocales: const [
+            Locale('tr', 'TR'),
+            Locale('en', 'US'),
+          ],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const SplashScreen(),
+          routes: {
+            '/splash': (context) => const SplashScreen(),
+            '/login': (context) => const LoginScreen(),
+            '/dashboard': (context) => const DashboardScreen(),
+            '/sign-up': (context) => const SignUpScreen(),
+            '/notifications': (context) => const NotificationsPage(),
+            '/admin': (context) => const AdminPanelScreen(),
+          },
+        );
   }
 }
 

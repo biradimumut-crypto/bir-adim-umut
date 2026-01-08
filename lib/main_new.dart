@@ -129,7 +129,7 @@ class MyApp extends StatelessWidget {
     );
 
     return MaterialApp(
-      title: 'Bir Adım Umut',
+      title: 'OneHopeStep',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,

@@ -14,6 +14,13 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
     
+    /// Admin kontrolü
+    function isAdmin() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.is_active == true;
+    }
+    
     /// Takım liderini kontrol et
     function isTeamLeader(teamId) {
       return isAuthenticated() && 
@@ -29,17 +36,27 @@ service cloud.firestore {
     // ========== USERS KOLEKSIYONU ==========
     
     match /users/{userId} {
-      // Kendi profilini oku
-      allow read: if isUser(userId);
+      // Herkes okuyabilir (sıralama amaçlı)
+      allow read: if isAuthenticated();
       
-      // Kendi profilini güncelle (sınırlı alanlar)
+      // Kendi profilini güncelle
       allow update: if isUser(userId);
+      
+      // Admin kullanıcıları güncelleyebilir (ban, bakiye vb.)
+      allow update: if isAdmin();
+      
+      // Referral bonus güncelleme (başka kullanıcı davet edildiğinde)
+      allow update: if isAuthenticated() &&
+                      request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['referral_bonus_steps', 'referral_count']);
+      
+      // Takım lideri başka kullanıcının current_team_id'sini güncelleyebilir (katılma isteği kabul edildiğinde)
+      allow update: if isAuthenticated() &&
+                      request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['current_team_id']);
       
       // Yeni user doc oluştur (Sign Up sırasında) - auth uid eşleşmesi yeterli
       allow create: if request.auth != null && request.auth.uid == userId;
-      
-      // Diğer kullanıcıları oku (Sıralama amaçlı - masked_name göster)
-      allow read: if isAuthenticated() && userId != request.auth.uid;
       
       // ========== NOTIFICATIONS ALT KOLEKSİYONU ==========
       
@@ -63,6 +80,75 @@ service cloud.firestore {
         // Cloud Function tarafından oluştur
         allow create: if isAuthenticated() && userId == request.auth.uid;
       }
+      
+      // ========== ACTIVITY_LOG ALT KOLEKSİYONU (Referral bonusları için) ==========
+      
+      match /activity_log/{logId} {
+        // Kendi aktivite geçmişini oku
+        allow read: if isUser(userId);
+        
+        // Referral bonusu için herhangi bir oturum açmış kullanıcı oluşturabilir
+        allow create: if isAuthenticated();
+      }
+      
+      // ========== BADGES ALT KOLEKSİYONU (Rozetler) ==========
+      
+      match /badges/{badgeId} {
+        // Kendi rozetlerini oku
+        allow read: if isUser(userId);
+        
+        // Rozet kazanıldığında oluştur (kendi rozetini)
+        allow create: if isUser(userId);
+        
+        // Rozeti "görüldü" olarak işaretle
+        allow update: if isUser(userId);
+        
+        // Rozet silinemez (kalıcı)
+        allow delete: if false;
+      }
+      
+      // ========== DAILY_STEPS ALT KOLEKSİYONU ==========
+      
+      match /daily_steps/{dateKey} {
+        // Kendi günlük adım verilerini oku
+        allow read: if isUser(userId);
+        
+        // Adım verisi oluştur/güncelle
+        allow write: if isUser(userId);
+      }
+      
+      // ========== AD_LOGS ALT KOLEKSİYONU (Kullanıcı Reklam Geçmişi) ==========
+      
+      match /ad_logs/{logId} {
+        // Kendi reklam geçmişini oku
+        allow read: if isUser(userId);
+        
+        // Reklam logu oluştur
+        allow create: if isUser(userId);
+        
+        // Loglar güncellenemez/silinemez
+        allow update, delete: if false;
+      }
+      
+      // ========== SESSIONS ALT KOLEKSİYONU (Oturum Takibi) ==========
+      
+      match /sessions/{sessionId} {
+        // Kendi oturumlarını oku
+        allow read: if isUser(userId);
+        
+        // Oturum oluştur/güncelle
+        allow write: if isUser(userId);
+      }
+      
+      // ========== DAILY_SESSIONS ALT KOLEKSİYONU ==========
+      
+      match /daily_sessions/{dateKey} {
+        // Kendi günlük oturum verilerini oku
+        allow read: if isUser(userId);
+        
+        // Günlük oturum verisi oluştur/güncelle
+        allow write: if isUser(userId);
+      }
     }
     
     // ========== TEAMS KOLEKSİYONU ==========
@@ -77,8 +163,16 @@ service cloud.firestore {
       // Lider takım bilgilerini güncelleyebilir
       allow update: if isTeamLeader(teamId);
       
-      // Lider takımı silebilir (soft delete)
-      allow delete: if isTeamLeader(teamId);
+      // Admin takımları güncelleyebilir
+      allow update: if isAdmin();
+      
+      // Üye katılma/ayrılma işlemleri (members_count, member_ids, team_bonus_steps, team_bonus_converted, total_team_hope)
+      allow update: if isAuthenticated() &&
+                      request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['members_count', 'member_ids', 'team_bonus_steps', 'team_bonus_converted', 'total_team_hope']);
+      
+      // Lider veya admin takımı silebilir
+      allow delete: if isTeamLeader(teamId) || isAdmin();
       
       // ========== TEAM_MEMBERS ALT KOLEKSİYONU ==========
       
@@ -108,15 +202,159 @@ service cloud.firestore {
       allow write: if isAuthenticated();
     }
     
+    // ========== ACTIVITY_LOGS ROOT KOLEKSİYONU (Leaderboard için) ==========
+    
+    match /activity_logs/{logId} {
+      // Herkes okuyabilir (sıralama amaçlı)
+      allow read: if isAuthenticated();
+      
+      // Oturum açmış kullanıcılar log oluşturabilir
+      allow create: if isAuthenticated();
+      
+      // Loglar güncellenemez/silinemez
+      allow update, delete: if false;
+    }
+    
+    // ========== NOTIFICATIONS ROOT KOLEKSİYONU (Takım davetleri için) ==========
+    
+    match /notifications/{notificationId} {
+      // Oturum açmış kullanıcılar okuyabilir (client-side filtreleme yapılır)
+      allow read: if isAuthenticated();
+      
+      // Bildirim oluşturabilir (davet gönderme vb.)
+      allow create: if isAuthenticated();
+      
+      // Bildirim güncelleyebilir (kabul/reddet)
+      allow update: if isAuthenticated();
+      
+      // Bildirim silebilir
+      allow delete: if isAuthenticated();
+    }
+    
     // ========== CHARITIES KOLEKSİYONU ==========
     
     match /charities/{charityId} {
       // Herkes vakıf listesini okuyabilir
       allow read: if isAuthenticated();
       
-      // Sadece admin ekleyebilir/güncelleyebilir
-      // (Firebase Admin SDK tarafından yapılır, bu kurallar uygulanmaz)
-      allow write: if false;
+      // Admin tam yetki
+      allow write: if isAdmin();
+      
+      // Normal kullanıcılar sadece bağış alanlarını güncelleyebilir
+      allow update: if isAuthenticated() &&
+                      request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['collected_amount', 'donor_count']);
+    }
+    
+    // ========== DONATIONS KOLEKSİYONU ==========
+    
+    match /donations/{donationId} {
+      // Admin tüm bağışları okuyabilir
+      allow read: if isAdmin();
+      
+      // Kullanıcı kendi bağışlarını okuyabilir
+      allow read: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      
+      // Bağış oluşturma (Cloud Function veya kullanıcı)
+      allow create: if isAuthenticated();
+      
+      // Sadece admin güncelleyebilir
+      allow update: if isAdmin();
+      
+      // Silinmez
+      allow delete: if false;
+    }
+    
+    // ========== ADMINS KOLEKSİYONU ==========
+    
+    match /admins/{adminId} {
+      // Herkes admin mi diye kontrol edebilir (kendi uid'si için)
+      allow read: if isAuthenticated();
+      
+      // Admin ekleme sadece mevcut adminler (Super Admin)
+      allow write: if isAdmin();
+    }
+    
+    // ========== ADMIN_STATS KOLEKSİYONU ==========
+    
+    match /admin_stats/{statId} {
+      // Sadece adminler okuyabilir
+      allow read: if isAdmin();
+      
+      // Cloud Function günceller
+      allow write: if isAdmin();
+    }
+    
+    // ========== ADMIN_LOGS KOLEKSİYONU ==========
+    
+    match /admin_logs/{logId} {
+      // Sadece adminler okuyabilir
+      allow read: if isAdmin();
+      
+      // Admin işlem yaptığında log oluşturur
+      allow create: if isAdmin();
+      
+      // Loglar silinemez/güncellenemez
+      allow update, delete: if false;
+    }
+    
+    // ========== BADGE_DEFINITIONS KOLEKSİYONU ==========
+    
+    match /badge_definitions/{badgeId} {
+      // Herkes rozet tanımlarını okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Sadece admin ekleyebilir/güncelleyebilir/silebilir
+      allow write: if isAdmin();
+    }
+    
+    // ========== BROADCAST_NOTIFICATIONS KOLEKSİYONU ==========
+    
+    match /broadcast_notifications/{notificationId} {
+      // Admin okuyabilir
+      allow read: if isAdmin();
+      
+      // Admin gönderebilir
+      allow create: if isAdmin();
+      
+      // Silinemez
+      allow delete: if false;
+    }
+    
+    // ========== DAILY_STATS KOLEKSİYONU ==========
+    
+    match /daily_stats/{dateKey} {
+      // Admin okuyabilir
+      allow read: if isAdmin();
+      
+      // Cloud Function günceller
+      allow write: if isAdmin();
+    }
+    
+    // ========== AD_LOGS KOLEKSİYONU (Reklam Takibi) ==========
+    
+    match /ad_logs/{logId} {
+      // Admin tüm reklam loglarını okuyabilir
+      allow read: if isAdmin();
+      
+      // Oturum açmış kullanıcılar reklam logu oluşturabilir
+      allow create: if isAuthenticated();
+      
+      // Loglar silinemez/güncellenemez
+      allow update, delete: if false;
+    }
+    
+    // ========== AD_ERRORS KOLEKSİYONU (Reklam Hataları) ==========
+    
+    match /ad_errors/{errorId} {
+      // Admin tüm hata loglarını okuyabilir
+      allow read: if isAdmin();
+      
+      // Herkes (oturum açmış) hata logu oluşturabilir
+      allow create: if isAuthenticated();
+      
+      // Loglar silinemez/güncellenemez
+      allow update, delete: if false;
     }
     
     // ========== STEP_LEADERBOARD KOLEKSİYONU ==========
@@ -137,6 +375,65 @@ service cloud.firestore {
       
       // Cloud Function tarafından güncellenir
       allow write: if false;
+    }
+    
+    // ========== CHARITY_COMMENTS KOLEKSİYONU ==========
+    
+    match /charity_comments/{commentId} {
+      // Herkes yorumları okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Oturum açmış kullanıcılar yorum ekleyebilir
+      allow create: if isAuthenticated() && 
+                       request.resource.data.user_id == request.auth.uid;
+      
+      // Kendi yorumunu silebilir
+      allow delete: if isAuthenticated() && 
+                       resource.data.user_id == request.auth.uid;
+    }
+    
+    // ========== HOPE_LEADERBOARD KOLEKSİYONU ==========
+    
+    match /hope_leaderboard/{docId} {
+      // Herkes sıralamayı okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Cloud Function tarafından güncellenir
+      allow write: if isAuthenticated();
+    }
+    
+    // ========== TEAM_LEADERBOARD KOLEKSİYONU ==========
+    
+    match /team_leaderboard/{docId} {
+      // Herkes takım sıralamasını okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Cloud Function tarafından güncellenir
+      allow write: if isAuthenticated();
+    }
+    
+    // ========== INVITATIONS KOLEKSİYONU ==========
+    
+    match /invitations/{inviteId} {
+      // Davetleri okuma ve yazma
+      allow read, write: if isAuthenticated();
+    }
+    
+    // ========== USER_BADGES KOLEKSİYONU ==========
+    
+    match /user_badges/{docId} {
+      // Kullanıcı rozetlerini okuma ve yazma
+      allow read, write: if isAuthenticated();
+    }
+    
+    // ========== APP_SETTINGS KOLEKSİYONU ==========
+    
+    match /app_settings/{docId} {
+      // Herkes ayarları okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Sadece admin güncelleyebilir
+      allow write: if isAdmin();
     }
     
     // ========== CATCH ALL (Güvenli Varsayılan) ==========

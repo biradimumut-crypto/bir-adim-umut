@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/notification_model.dart';
 import '../services/team_service.dart';
 import '../services/notification_service.dart';
+import '../providers/language_provider.dart';
+import 'success_dialog.dart';
 
 /// Takım Davet Dialog Widget
 /// 
@@ -27,14 +30,15 @@ class _TeamInviteDialogState extends State<TeamInviteDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.read<LanguageProvider>();
     return AlertDialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
-      title: const Text(
-        '🎉 Takım Daveti',
+      title: Text(
+        lang.teamInviteTitle,
         textAlign: TextAlign.center,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.bold,
         ),
@@ -47,22 +51,22 @@ class _TeamInviteDialogState extends State<TeamInviteDialog> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
+              color: const Color(0xFF6EC6B5).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(
               children: [
                 Text(
-                  widget.notification.teamName ?? 'Bilinmiyor',
+                  widget.notification.teamName ?? lang.unknownText,
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue,
+                    color: Color(0xFF6EC6B5),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${widget.notification.senderName} sizi takıma davet etti',
+                  lang.invitedYouToTeam(widget.notification.senderName ?? ''),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
@@ -75,7 +79,7 @@ class _TeamInviteDialogState extends State<TeamInviteDialog> {
           const SizedBox(height: 20),
           // Açıklama metni
           Text(
-            'Bu takıma katılarak diğer üyelerle birlikte adım atabilir, takım sıralamasında yer alabilirsiniz.',
+            lang.teamInviteDesc,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
@@ -93,7 +97,7 @@ class _TeamInviteDialogState extends State<TeamInviteDialog> {
                   await _rejectInvite();
                 },
           child: Text(
-            'Reddet',
+            lang.reject,
             style: TextStyle(
               color: Colors.grey[600],
               fontSize: 14,
@@ -124,9 +128,9 @@ class _TeamInviteDialogState extends State<TeamInviteDialog> {
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 )
-              : const Text(
-                  'Kabul Et',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+              : Text(
+                  lang.accept,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
         ),
       ],
@@ -135,6 +139,7 @@ class _TeamInviteDialogState extends State<TeamInviteDialog> {
 
   /// Daveti Kabul Et
   Future<void> _acceptInvite() async {
+    final lang = context.read<LanguageProvider>();
     setState(() => _isLoading = true);
 
     final result = await _teamService.acceptTeamInvite(
@@ -145,29 +150,31 @@ class _TeamInviteDialogState extends State<TeamInviteDialog> {
     if (!mounted) return;
 
     if (result['success']) {
-      // Başarılı snackbar göster
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '✅ ${widget.notification.teamName ?? "Takıma"} başarıyla katıldınız!',
-            style: const TextStyle(color: Colors.white),
-          ),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      // Başarılı dialog göster (konfetili)
       widget.onDismiss();
       Navigator.of(context).pop();
+      await showSuccessDialog(
+        context: context,
+        title: lang.isTurkish ? 'Hoş Geldin!' : 'Welcome!',
+        message: widget.notification.teamName ?? lang.team,
+        subtitle: lang.successfullyJoinedTeam(widget.notification.teamName ?? lang.team),
+        icon: Icons.group_add_rounded,
+        gradientColors: [const Color(0xFF6EC6B5), const Color(0xFF4CAF50)],
+        buttonText: lang.isTurkish ? 'Harika!' : 'Great!',
+      );
     } else {
-      // Hata snackbar göster
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '❌ Hata: ${result['error'] ?? 'Bilinmeyen hata'}',
-            style: const TextStyle(color: Colors.white),
-          ),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
+      // Hata dialog göster
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(lang.isTurkish ? 'Hata' : 'Error'),
+          content: Text(lang.errorWithMessage(result['error'] ?? lang.unknownError)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(lang.ok),
+            ),
+          ],
         ),
       );
       setState(() => _isLoading = false);
@@ -176,6 +183,7 @@ class _TeamInviteDialogState extends State<TeamInviteDialog> {
 
   /// Daveti Reddet
   Future<void> _rejectInvite() async {
+    final lang = context.read<LanguageProvider>();
     setState(() => _isLoading = true);
 
     final result = await _teamService.rejectTeamInvite(widget.notification.id);
@@ -183,14 +191,28 @@ class _TeamInviteDialogState extends State<TeamInviteDialog> {
     if (!mounted) return;
 
     if (result['success']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            '👋 Davet reddedildi.',
-            style: TextStyle(color: Colors.white),
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.orange, size: 28),
+              const SizedBox(width: 8),
+              Text(lang.isTurkish ? 'Bilgi' : 'Info'),
+            ],
           ),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
+          content: Text(lang.inviteRejectedMsg),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(lang.ok),
+            ),
+          ],
         ),
       );
       widget.onDismiss();

@@ -1,6 +1,6 @@
 {
-    "name": "bir_adim_umut",
-    "short_name": "bir_adim_umut",
+    "name": "OneHopeStep",
+    "short_name": "OneHopeStep",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/activity_log_model.dart';
+import 'badge_service.dart';
 
 class ActivityLogService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final BadgeService _badgeService = BadgeService();
 
   /// Bağış işlemini kaydıt ve Hope bakiyesini güncelle
   /// 
@@ -17,6 +19,7 @@ class ActivityLogService {
   /// 6. Team member'ın Hope'ü güncellenir
   Future<Map<String, dynamic>> createDonationLog({
     required String charityName,
+    required String charityId,
     required double hopeAmount,
     String? charityLogoUrl,
   }) async {
@@ -34,6 +37,7 @@ class ActivityLogService {
 
       final userData = userDoc.data()!;
       final currentBalance = (userData['wallet_balance_hope'] ?? 0).toDouble();
+      final userName = userData['full_name'] ?? 'Anonim';
 
       if (currentBalance < hopeAmount) {
         return {
@@ -44,14 +48,30 @@ class ActivityLogService {
         };
       }
 
-      // Activity log oluştur
-      final logRef = _firestore.collection('users').doc(userId).collection('activity_logs').doc();
-      await logRef.set({
+      // 1. User subcollection'a activity log oluştur (rozet hesaplama için)
+      final userLogRef = _firestore.collection('users').doc(userId).collection('activity_logs').doc();
+      await userLogRef.set({
         'user_id': userId,
-        'action_type': 'donation',
+        'activity_type': 'donation', // ✅ Standart format
+        'action_type': 'donation',  // Geriye uyumluluk
         'target_name': charityName,
+        'charity_id': charityId,
         'amount': hopeAmount,
         'timestamp': Timestamp.now(),
+        'charity_logo_url': charityLogoUrl,
+      });
+      
+      // 2. Global activity_logs'a da yaz (charity ekranı için)
+      final globalLogRef = _firestore.collection('activity_logs').doc();
+      await globalLogRef.set({
+        'user_id': userId,
+        'user_name': userName,
+        'activity_type': 'donation',
+        'charity_id': charityId,
+        'charity_name': charityName,
+        'amount': hopeAmount,  // Tutarlılık için amount kullan
+        'hope_amount': hopeAmount,  // Geriye uyumluluk için
+        'created_at': Timestamp.now(),
         'charity_logo_url': charityLogoUrl,
       });
 
@@ -80,9 +100,45 @@ class ActivityLogService {
         });
       }
 
+      // 🎖️ Lifetime bağışı güncelle ve rozet kontrol et
+      await _badgeService.updateLifetimeDonations(hopeAmount);
+
+      // 📊 Kullanıcının toplam bağış istatistiğini güncelle
+      await _firestore.collection('users').doc(userId).update({
+        'lifetime_donated_hope': FieldValue.increment(hopeAmount),
+        'total_donation_count': FieldValue.increment(1),
+      });
+
+      // 🏛️ Vakfın bağış istatistiklerini güncelle
+      try {
+        final charityRef = _firestore.collection('charities').doc(charityId);
+        final charityDoc = await charityRef.get();
+        
+        if (charityDoc.exists) {
+          // İlk kez bağış yapan kullanıcı mı kontrol et
+          final existingDonation = await _firestore
+              .collection('activity_logs')
+              .where('user_id', isEqualTo: userId)
+              .where('charity_id', isEqualTo: charityId)
+              .where('activity_type', isEqualTo: 'donation')
+              .limit(2)
+              .get();
+          
+          // Eğer bu kullanıcının bu vakfa ilk bağışıysa donor_count artır
+          final isFirstDonation = existingDonation.docs.length <= 1;
+          
+          await charityRef.update({
+            'collected_amount': FieldValue.increment(hopeAmount),
+            if (isFirstDonation) 'donor_count': FieldValue.increment(1),
+          });
+        }
+      } catch (e) {
+        print('Vakıf istatistik güncelleme hatası: $e');
+      }
+
       return {
         'success': true,
-        'logId': logRef.id,
+        'logId': userLogRef.id,
         'newBalance': currentBalance - hopeAmount,
         'message': '✅ $charityName\'a başarıyla $hopeAmount Hope bağışladınız!',
       };
@@ -97,7 +153,7 @@ class ActivityLogService {
   /// 1. Dönüştürülebilecek adım sayısı kontrol edilir (max 2500)
   /// 2. Cooldown kontrol edilir (10 dakika)
   /// 3. Activity log oluşturulur
-  /// 4. Hope bakiyesi güncellenir (2500 adım = 0.10 Hope)
+  /// 4. Hope bakiyesi güncellenir (2500 adım = 25 Hope, 100 adım = 1 Hope)
   /// 5. Günlük adım verisi güncellenir
   Future<Map<String, dynamic>> createStepConversionLog({
     required int stepsToConvert,
@@ -116,23 +172,26 @@ class ActivityLogService {
         };
       }
 
-      // Hope miktarını hesapla (2500 adım = 0.10 Hope)
-      final hopeAmount = (stepsToConvert / 2500) * 0.10;
+      // Hope miktarını hesapla (2500 adım = 25 Hope, 100 adım = 1 Hope)
+      final hopeAmount = stepsToConvert / 100.0;
 
       // Activity log oluştur
       final logRef = _firestore.collection('users').doc(userId).collection('activity_logs').doc();
       await logRef.set({
         'user_id': userId,
-        'action_type': 'step_conversion',
+        'activity_type': 'step_conversion', // ✅ Standart format
+        'action_type': 'step_conversion',  // Geriye uyumluluk
         'target_name': 'Adım Dönüştürme',
         'amount': hopeAmount,
         'steps_converted': stepsToConvert,
         'timestamp': Timestamp.now(),
       });
 
-      // Kullanıcı bakiyesini güncelle
+      // Kullanıcı bakiyesini ve istatistiklerini güncelle
       await _firestore.collection('users').doc(userId).update({
         'wallet_balance_hope': FieldValue.increment(hopeAmount),
+        'lifetime_converted_steps': FieldValue.increment(stepsToConvert),
+        'lifetime_earned_hope': FieldValue.increment(hopeAmount),
       });
 
       // Günlük adım verisi güncelle
@@ -198,7 +257,7 @@ class ActivityLogService {
 
       final snapshot = await query.get();
       return snapshot.docs
-          .map((doc) => ActivityLogModel.fromFirestore(doc))
+          .map((doc) => ActivityLogModel.fromFirestore(doc as DocumentSnapshot<Map<String, dynamic>>))
           .toList();
     } catch (e) {
       print('Activity log al hatası: $e');

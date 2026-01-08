@@ -1,14 +1,8 @@
 import UIKit
 import Flutter
 
-@UIApplicationMain
-@objc class GeneratedPluginRegistrant: NSObject {
- public static func register(with registry: FlutterPluginRegistry) {
-  }
-}
-
 @main
-class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?

@@ -5,13 +5,15 @@ description: "Hope Kazanarak Sosyal Sorumluluk Kazandı - Bir Adım Umut Uygulam
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.0+3
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
 
   # Firebase
@@ -21,6 +23,7 @@ dependencies:
   cloud_functions: ^6.0.4
   firebase_storage: ^13.0.4
   firebase_messaging: ^16.0.4
+  firebase_app_check: ^0.4.1+2
   google_sign_in: ^6.2.1
 
   # State Management
@@ -28,17 +31,18 @@ dependencies:
   riverpod: ^2.4.0
   flutter_riverpod: ^2.4.0
 
-  # Health & Fitness (geçici olarak devre dışı - AGP uyumsuzluğu)
-  # health: ^9.0.0
-  # pedometer: ^3.0.0
+  # Health & Fitness
+  health: ^11.0.0
+  permission_handler: ^11.3.0
 
   # Charts
   fl_chart: ^0.65.0
 
-  # AdMob (geçici olarak devre dışı - AGP uyumsuzluğu)
-  # google_mobile_ads: ^3.0.0
+  # AdMob
+  google_mobile_ads: ^5.1.0
 
   google_fonts: ^6.0.0
+  font_awesome_flutter: 10.5.0
   # UI & Navigation
   go_router: ^13.0.0
   cached_network_image: ^3.3.0
@@ -49,11 +53,22 @@ dependencies:
   uuid: ^4.0.0
   shared_preferences: ^2.2.2
   image_picker: ^1.0.4
+  share_plus: ^7.2.2
+  url_launcher: ^6.2.2
+  path_provider: ^2.1.2
   flutter_dotenv: ^5.1.0
   percent_indicator: ^4.1.1
+  flutter_local_notifications: ^17.2.4
+  timezone: ^0.9.4
 
   # Video
   video_player: ^2.8.2
+  
+  # Device Info - Fraud Prevention
+  device_info_plus: ^10.1.0
+  
+  # Package Info - App Version Tracking
+  package_info_plus: ^8.0.0
 
 dev_dependencies:
   flutter_test:
@@ -65,8 +80,11 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/
     - assets/icons/
     - assets/videos/
+    - assets/images/
+    - assets/badges/
 
   # fonts:
   #   - family: CustomFont

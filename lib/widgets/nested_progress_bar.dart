@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:percent_indicator/percent_indicator.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 
 /// İç İçe Progress Bar Widget (Dashboard)
 /// 
@@ -30,6 +32,7 @@ class NestedProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>();
     final totalPercent = (totalSteps / dailyGoal).clamp(0.0, 1.0);
     final convertedPercent = (convertedSteps / dailyGoal).clamp(0.0, 1.0);
     final carryOverPercent = (carryOverSteps / dailyGoal).clamp(0.0, 1.0);
@@ -58,9 +61,9 @@ class NestedProgressBar extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Günlük Adım Hedefi',
-                    style: TextStyle(
+                  Text(
+                    lang.dailyStepGoal,
+                    style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                       color: Colors.grey,
@@ -84,20 +87,20 @@ class NestedProgressBar extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: totalSteps >= dailyGoal
-                      ? Colors.green.withOpacity(0.1)
-                      : Colors.orange.withOpacity(0.1),
+                      ? const Color(0xFF6EC6B5).withOpacity(0.1)
+                      : const Color(0xFFE07A5F).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   totalSteps >= dailyGoal
-                      ? '✅ Hedef Tamamlandı!'
-                      : '${dailyGoal - totalSteps} adım kaldı',
+                      ? lang.goalCompleted
+                      : lang.stepsRemaining(dailyGoal - totalSteps),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: totalSteps >= dailyGoal
-                        ? Colors.green
-                        : Colors.orange,
+                        ? const Color(0xFF6EC6B5)
+                        : const Color(0xFFE07A5F),
                   ),
                 ),
               ),
@@ -113,7 +116,7 @@ class NestedProgressBar extends StatelessWidget {
                 const Icon(Icons.history, size: 16, color: Colors.deepOrange),
                 const SizedBox(width: 6),
                 Text(
-                  'Taşınan Adımlar: $carryOverSteps',
+                  lang.carryOverStepsLabel(carryOverSteps),
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -122,7 +125,7 @@ class NestedProgressBar extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '7 gün içinde kullan!',
+                  lang.use7Days,
                   style: TextStyle(
                     fontSize: 10,
                     color: Colors.grey[600],
@@ -152,8 +155,8 @@ class NestedProgressBar extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: totalPercent,
                   minHeight: 28,
-                  backgroundColor: Colors.blue.withOpacity(0.1),
-                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+                  backgroundColor: const Color(0xFF6EC6B5).withOpacity(0.1),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6EC6B5)),
                 ),
               ),
               // İç Progress Bar (Dönüştürülen) - üzerine çakışmış
@@ -165,7 +168,7 @@ class NestedProgressBar extends StatelessWidget {
                     minHeight: 28,
                     backgroundColor: Colors.transparent,
                     valueColor:
-                        const AlwaysStoppedAnimation<Color>(Colors.green),
+                        const AlwaysStoppedAnimation<Color>(Color(0xFFE07A5F)),
                   ),
                 ),
               ),
@@ -194,19 +197,19 @@ class NestedProgressBar extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Dönüştürülen',
-                    style: TextStyle(
+                  Text(
+                    lang.convertedLabel,
+                    style: const TextStyle(
                       fontSize: 12,
                       color: Colors.grey,
                     ),
                   ),
                   Text(
-                    '$convertedSteps adım',
+                    lang.stepsAmount(convertedSteps),
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: Colors.green,
+                      color: Color(0xFF6EC6B5),
                     ),
                   ),
                 ],
@@ -214,19 +217,19 @@ class NestedProgressBar extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text(
-                    'Dönüştürülebilir',
-                    style: TextStyle(
+                  Text(
+                    lang.convertibleLabel,
+                    style: const TextStyle(
                       fontSize: 12,
                       color: Colors.grey,
                     ),
                   ),
                   Text(
-                    '$availableSteps adım',
+                    lang.stepsAmount(availableSteps),
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: Colors.orange,
+                      color: Color(0xFFE07A5F),
                     ),
                   ),
                 ],
@@ -244,7 +247,7 @@ class NestedProgressBar extends StatelessWidget {
                   ? null
                   : onConvertPress,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: const Color(0xFF6EC6B5),
                 disabledBackgroundColor: Colors.grey.withOpacity(0.3),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
@@ -262,9 +265,9 @@ class NestedProgressBar extends StatelessWidget {
                     )
                   : Column(
                       children: [
-                        const Text(
-                          'Adımları Hope\'e Dönüştür',
-                          style: TextStyle(
+                        Text(
+                          lang.convertStepsToHope,
+                          style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
@@ -272,7 +275,7 @@ class NestedProgressBar extends StatelessWidget {
                         ),
                         if (availableSteps > 0)
                           Text(
-                            '${((availableSteps > 2500 ? 2500 : availableSteps) / 2500 * 0.10).toStringAsFixed(2)} Hope kazanabilirsin',
+                            lang.canEarnHope(((availableSteps > 2500 ? 2500 : availableSteps) / 100.0).toStringAsFixed(0)),
                             style: const TextStyle(
                               fontSize: 12,
                               color: Colors.white70,
@@ -302,15 +305,15 @@ class NestedProgressBar extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    const Text(
-                      '🔥 Taşınan Adımları Dönüştür',
-                      style: TextStyle(
+                    Text(
+                      lang.convertCarryOverSteps,
+                      style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
-                      '$carryOverSteps adım bekliyor (${((carryOverSteps > 2500 ? 2500 : carryOverSteps) / 2500 * 0.10).toStringAsFixed(2)} Hope)',
+                      lang.stepsWaiting(carryOverSteps, ((carryOverSteps > 2500 ? 2500 : carryOverSteps) / 2500 * 0.10).toStringAsFixed(2)),
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.deepOrange.withOpacity(0.8),
@@ -344,7 +347,7 @@ class NestedProgressBar extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Sonraki dönüştürmeye $minutesUntilConversion dakika kaldı',
+                      lang.minutesUntilNextConversion(minutesUntilConversion!),
                       style: const TextStyle(
                         fontSize: 13,
                         color: Colors.orange,
@@ -362,26 +365,26 @@ class NestedProgressBar extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: const Color(0xFF6EC6B5).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: Colors.blue.withOpacity(0.3),
+                  color: const Color(0xFF6EC6B5).withOpacity(0.3),
                 ),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.info_outline,
-                    color: Colors.blue,
+                    color: Color(0xFF6EC6B5),
                     size: 18,
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Dönüştürmek için bir reklam izlemeniz gerekmektedir.',
-                      style: TextStyle(
+                      lang.watchAdRequired,
+                      style: const TextStyle(
                         fontSize: 12,
-                        color: Colors.blue,
+                        color: Color(0xFFE07A5F),
                       ),
                     ),
                   ),

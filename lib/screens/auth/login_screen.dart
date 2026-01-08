@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter/rendering.dart';
+import 'dart:ui' as ui;
+import 'dart:typed_data';
 import '../../services/auth_service.dart';
+import '../../services/badge_service.dart';
+import '../../providers/language_provider.dart';
+import '../dashboard/dashboard_screen.dart';
 import 'sign_up_screen.dart';
 
 /// Giriş Yap Sayfası
@@ -20,6 +27,56 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _isPasswordVisible = false;
   String? _errorMessage;
+  
+  // GIF kontrolü
+  final GlobalKey _gifKey = GlobalKey();
+  Uint8List? _frozenGifImage;
+  bool _gifFinished = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // GIF süresi kadar bekle ve son kareyi yakala
+    Future.delayed(const Duration(milliseconds: 2900), () {
+      _captureGifFrame();
+    });
+  }
+
+  /// Login sonrası yönlendirme (iOS Health izni otomatik istenecek)
+  Future<void> _navigateAfterLogin() async {
+    if (!mounted) return;
+    
+    // Login başarılı olduğunda rozet kontrolü yap
+    try {
+      await BadgeService().updateLoginStreak();
+      await BadgeService().checkAllBadges();
+    } catch (e) {
+      debugPrint('Badge kontrolü hatası: $e');
+    }
+    
+    if (mounted) {
+      Navigator.of(context).pushReplacementNamed('/dashboard');
+    }
+  }
+
+  Future<void> _captureGifFrame() async {
+    try {
+      final boundary = _gifKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary != null) {
+        final image = await boundary.toImage(pixelRatio: 3.0);
+        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData != null && mounted) {
+          setState(() {
+            _frozenGifImage = byteData.buffer.asUint8List();
+            _gifFinished = true;
+          });
+        }
+      }
+    } catch (e) {
+      // Hata durumunda GIF devam eder
+      print('GIF capture hatası: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -30,42 +87,53 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 60),
-              
-              // Logo / İkon
-              Icon(
-                Icons.volunteer_activism,
-                size: 80,
-                color: Colors.blue[600],
-              ),
-              
-              const SizedBox(height: 24),
-              
-              // Başlık
-              Text(
-                'Bir Adım Umut',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+    return Consumer<LanguageProvider>(
+      builder: (context, lang, _) {
+        return Scaffold(
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 10),
+                  
+                  // Logo GIF - Tek seferlik, son karede kalır
+                  Center(
+                    child: SizedBox(
+                      width: 220,
+                      height: 220,
+                      child: _gifFinished && _frozenGifImage != null
+                          ? Image.memory(
+                              _frozenGifImage!,
+                              width: 220,
+                              height: 220,
+                              gaplessPlayback: true,
+                            )
+                          : RepaintBoundary(
+                              key: _gifKey,
+                              child: Image.asset(
+                                'assets/videos/yeni.gif',
+                                width: 220,
+                                height: 220,
+                                gaplessPlayback: true,
+                              ),
+                            ),
                     ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Hoşgeldin! Giriş yap ve umut yaymaya devam et.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-                textAlign: TextAlign.center,
+                  ),
+                  
+                  const SizedBox(height: 4),
+                  
+                  // Slogan
+                  Text(
+                    lang.welcomeMessage,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                    textAlign: TextAlign.center,
               ),
 
-              const SizedBox(height: 48),
+              const SizedBox(height: 12),
 
               // Hata mesajı
               if (_errorMessage != null)
@@ -96,8 +164,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
-                  labelText: 'E-posta',
-                  hintText: 'ornek@email.com',
+                  labelText: lang.email,
+                  hintText: lang.emailHint,
                   prefixIcon: const Icon(Icons.email_outlined),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -112,8 +180,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 controller: _passwordController,
                 obscureText: !_isPasswordVisible,
                 decoration: InputDecoration(
-                  labelText: 'Şifre',
-                  hintText: '••••••••',
+                  labelText: lang.password,
+                  hintText: lang.passwordHint,
                   prefixIcon: const Icon(Icons.lock_outlined),
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -136,42 +204,65 @@ class _LoginScreenState extends State<LoginScreen> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: _handleForgotPassword,
-                  child: const Text('Şifremi Unuttum'),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Giriş Yap Butonu
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleLogin,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[600],
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF6EC6B5),
                   ),
+                  child: Text(lang.forgotPassword),
                 ),
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text(
-                        'Giriş Yap',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+
+              // Giriş Yap Butonu - Gradient
+              Container(
+                width: double.infinity,
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6EC6B5), Color(0xFFE07A5F), Color(0xFFF2C94C)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFE07A5F).withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _handleLogin,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          lang.login,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
 
               // Veya ayırıcı
               Row(
@@ -180,7 +271,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      'veya',
+                      lang.or,
                       style: TextStyle(color: Colors.grey[500]),
                     ),
                   ),
@@ -188,7 +279,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
               // Sosyal giriş butonları
               Row(
@@ -216,14 +307,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
 
-              const SizedBox(height: 24),
+              const Spacer(),
 
               // Kayıt Ol linki
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'Hesabın yok mu? ',
+                    '${lang.noAccount} ',
                     style: TextStyle(color: Colors.grey[600]),
                   ),
                   GestureDetector(
@@ -235,20 +326,26 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       );
                     },
-                    child: const Text(
-                      'Kayıt Ol',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        fontWeight: FontWeight.bold,
+                    child: ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFF6EC6B5), Color(0xFFE07A5F), Color(0xFFF2C94C)],
+                      ).createShader(bounds),
+                      child: Text(
+                        lang.signUp,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
                 ],
-              ),
-            ],
+              ),                const SizedBox(height: 20),            ],
           ),
         ),
       ),
+    );
+      },
     );
   }
 
@@ -279,6 +376,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// Google ile giriş
   Future<void> _handleGoogleSignIn() async {
+    final lang = context.read<LanguageProvider>();
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -289,13 +387,43 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (result['success'] == true) {
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/dashboard');
+          await _navigateAfterLogin();
         }
       } else {
-        setState(() => _errorMessage = result['error']);
+        final error = result['error'] ?? '';
+        setState(() => _errorMessage = lang.translateError(error));
       }
     } catch (e) {
-      setState(() => _errorMessage = 'Google girişi başarısız: $e');
+      setState(() => _errorMessage = lang.googleLoginFailed);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+  /// Apple ile giriş
+  Future<void> _handleAppleSignIn() async {
+    final lang = context.read<LanguageProvider>();
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final result = await _authService.signInWithApple();
+
+      if (result['success'] == true) {
+        if (mounted) {
+          await _navigateAfterLogin();
+        }
+      } else {
+        final error = result['error'] ?? '';
+        setState(() => _errorMessage = lang.translateError(error));
+      }
+    } catch (e) {
+      setState(() => _errorMessage = lang.isTurkish 
+          ? 'Apple ile giriş başarısız oldu.' 
+          : 'Apple sign-in failed.');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -303,39 +431,13 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  /// Apple ile giriş - Yakında
-  void _handleAppleSignIn() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(Icons.apple, color: Colors.grey[800], size: 28),
-            const SizedBox(width: 12),
-            const Text('Apple ile Giriş'),
-          ],
-        ),
-        content: const Text(
-          'Apple ile giriş özelliği yakında eklenecek!\n\nŞimdilik Google ile giriş yapabilirsin.',
-          style: TextStyle(fontSize: 16),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Tamam'),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Giriş işlemi
   Future<void> _handleLogin() async {
+    final lang = context.read<LanguageProvider>();
     setState(() => _errorMessage = null);
 
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      setState(() => _errorMessage = 'E-posta ve şifre gereklidir.');
+      setState(() => _errorMessage = lang.isTurkish ? 'E-posta ve şifre gereklidir.' : 'Email and password are required.');
       return;
     }
 
@@ -352,45 +454,52 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _isLoading = false);
 
       if (result['success']) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Giriş başarılı!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.of(context).pushReplacementNamed('/dashboard');
+        await _navigateAfterLogin();
       } else {
-        setState(() => _errorMessage = result['error'] ?? 'Giriş başarısız.');
+        final errorCode = result['error'] ?? '';
+        
+        // Kullanıcı bulunamadıysa veya geçersiz credential ise kayıt sayfasına yönlendir
+        if (errorCode == 'user-not-found' || errorCode == 'invalid-credential' || errorCode.contains('user-not-found') || errorCode.contains('invalid-credential')) {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const SignUpScreen(),
+              ),
+            );
+          }
+        } else {
+          setState(() => _errorMessage = lang.translateError(errorCode));
+        }
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Bir hata oluştu: $e';
+        _errorMessage = '${lang.error}: $e';
       });
     }
   }
 
   /// Şifremi unuttum
   void _handleForgotPassword() {
+    final lang = context.read<LanguageProvider>();
     final emailController = TextEditingController();
     
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Şifremi Sıfırla'),
+        title: Text(lang.resetPassword),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'E-posta adresinizi girin, şifre sıfırlama linki gönderelim.',
-            ),
+            Text(lang.resetPasswordDesc),
             const SizedBox(height: 16),
             TextField(
               controller: emailController,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                labelText: 'E-posta',
+                labelText: lang.email,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -401,7 +510,10 @@ class _LoginScreenState extends State<LoginScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('İptal'),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF6EC6B5),
+            ),
+            child: Text(lang.cancel),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -410,15 +522,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (mounted) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('📧 Şifre sıfırlama e-postası gönderildi!'),
-                      backgroundColor: Colors.blue,
+                    SnackBar(
+                      content: Text('📧 ${lang.passwordResetSent}'),
+                      backgroundColor: const Color(0xFF6EC6B5),
                     ),
                   );
                 }
               }
             },
-            child: const Text('Gönder'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6EC6B5),
+              foregroundColor: Colors.white,
+            ),
+            child: Text(lang.isTurkish ? 'Gönder' : 'Send'),
           ),
         ],
       ),

@@ -10,6 +10,10 @@ class TeamModel {
   final double totalTeamHope; // Sıralamada kullanılan toplam bağış
   final DateTime createdAt;
   final List<String> memberIds; // Üye listesi (opsiyonel - performans için)
+  
+  // Takım Bonus Adımları (sıralama ödülü + referral)
+  final int teamBonusSteps; // Takım bonus havuzu
+  final int teamBonusConverted; // Dönüştürülen takım bonus adımlar
 
   TeamModel({
     required this.teamId,
@@ -21,6 +25,8 @@ class TeamModel {
     required this.totalTeamHope,
     required this.createdAt,
     this.memberIds = const [],
+    this.teamBonusSteps = 0,
+    this.teamBonusConverted = 0,
   });
 
   /// Firestore'dan TeamModel'e dönüştür
@@ -36,6 +42,8 @@ class TeamModel {
       totalTeamHope: (data['total_team_hope'] ?? 0).toDouble(),
       createdAt: (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
       memberIds: List<String>.from(data['member_ids'] ?? []),
+      teamBonusSteps: data['team_bonus_steps'] ?? 0,
+      teamBonusConverted: data['team_bonus_converted'] ?? 0,
     );
   }
 
@@ -50,6 +58,8 @@ class TeamModel {
       'total_team_hope': totalTeamHope,
       'created_at': Timestamp.fromDate(createdAt),
       'member_ids': memberIds,
+      'team_bonus_steps': teamBonusSteps,
+      'team_bonus_converted': teamBonusConverted,
     };
   }
 
@@ -64,6 +74,8 @@ class TeamModel {
     double? totalTeamHope,
     DateTime? createdAt,
     List<String>? memberIds,
+    int? teamBonusSteps,
+    int? teamBonusConverted,
   }) {
     return TeamModel(
       teamId: teamId ?? this.teamId,
@@ -75,6 +87,8 @@ class TeamModel {
       totalTeamHope: totalTeamHope ?? this.totalTeamHope,
       createdAt: createdAt ?? this.createdAt,
       memberIds: memberIds ?? this.memberIds,
+      teamBonusSteps: teamBonusSteps ?? this.teamBonusSteps,
+      teamBonusConverted: teamBonusConverted ?? this.teamBonusConverted,
     );
   }
 }
