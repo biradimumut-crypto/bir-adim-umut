@@ -845,13 +845,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     final medals = ['🥇', '🥈', '🥉'];
     
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         // Madalya
         Text(
           medals[rank - 1],
-          style: const TextStyle(fontSize: 32),
+          style: const TextStyle(fontSize: 28),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         
         // Avatar - Profil fotoğrafı ile
         Container(
@@ -859,40 +860,40 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             shape: BoxShape.circle,
             border: Border.all(
               color: isCurrentUser ? const Color(0xFF6EC6B5) : color,
-              width: 3,
+              width: 2,
             ),
             boxShadow: [
               BoxShadow(
                 color: color.withOpacity(0.3),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
           child: CircleAvatar(
-            radius: rank == 1 ? 35 : 28,
+            radius: rank == 1 ? 30 : 24,
             backgroundColor: color.withOpacity(0.2),
             backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
             child: photoUrl == null
                 ? Icon(
                     Icons.person,
-                    size: rank == 1 ? 35 : 28,
+                    size: rank == 1 ? 30 : 24,
                     color: color,
                   )
                 : null,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         
         // İsim
         SizedBox(
-          width: 100,
+          width: 90,
           child: Text(
             name,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              fontSize: rank == 1 ? 13 : 11,
+              fontSize: rank == 1 ? 11 : 10,
               color: isCurrentUser ? const Color(0xFFE07A5F) : Colors.black87,
             ),
             maxLines: 2,
@@ -902,11 +903,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         
         if (isCurrentUser)
           Container(
-            margin: const EdgeInsets.only(top: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            margin: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
             decoration: BoxDecoration(
               color: const Color(0xFF6EC6B5),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Builder(
               builder: (context) {
@@ -915,7 +916,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                   lang.youIndicator,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 10,
+                    fontSize: 9,
                     fontWeight: FontWeight.bold,
                   ),
                 );
@@ -923,11 +924,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             ),
           ),
         
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         
         // Podyum kutusu
         Container(
-          width: 100,
+          width: 90,
           height: height,
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -935,33 +936,33 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
             boxShadow: [
               BoxShadow(
                 color: color.withOpacity(0.3),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
+                blurRadius: 6,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: Colors.white, size: 24),
-              const SizedBox(height: 4),
+              Icon(icon, color: Colors.white, size: 20),
+              const SizedBox(height: 2),
               Text(
                 value,
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 18,
+                  fontSize: 16,
                 ),
               ),
               Text(
                 valueLabel,
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.9),
-                  fontSize: 11,
+                  fontSize: 10,
                 ),
               ),
             ],
@@ -989,14 +990,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         // Madalya
         Text(
           medals[rank - 1],
-          style: const TextStyle(fontSize: 32),
+          style: const TextStyle(fontSize: 28),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         
         // Logo - Takım fotoğrafı ile
         Container(
-          width: rank == 1 ? 70 : 56,
-          height: rank == 1 ? 70 : 56,
+          width: rank == 1 ? 60 : 50,
+          height: rank == 1 ? 60 : 50,
           decoration: BoxDecoration(
             gradient: photoUrl == null 
                 ? LinearGradient(
@@ -1037,17 +1038,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 )
               : null,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         
         // Takım ismi
         SizedBox(
-          width: 100,
+          width: 90,
           child: Text(
             name,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              fontSize: rank == 1 ? 13 : 11,
+              fontSize: rank == 1 ? 12 : 10,
               color: isCurrentTeam ? Colors.green[700] : Colors.black87,
             ),
             maxLines: 2,
@@ -1057,11 +1058,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         
         if (isCurrentTeam)
           Container(
-            margin: const EdgeInsets.only(top: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            margin: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
             decoration: BoxDecoration(
               color: Colors.green,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Builder(
               builder: (context) {
@@ -1070,7 +1071,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                   lang.yourTeamIndicator,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 10,
+                    fontSize: 9,
                     fontWeight: FontWeight.bold,
                   ),
                 );
@@ -1078,11 +1079,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             ),
           ),
         
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         
         // Podyum kutusu
         Container(
-          width: 100,
+          width: 90,
           height: height,
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -1090,49 +1091,52 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
             boxShadow: [
               BoxShadow(
                 color: color.withOpacity(0.3),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
+                blurRadius: 6,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.favorite, color: Colors.white, size: 24),
-              const SizedBox(height: 4),
-              Text(
-                value.toStringAsFixed(1),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.favorite, color: Colors.white, size: 18),
+                Text(
+                  value.toStringAsFixed(1),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
-              ),
-              Text(
-                'Hope',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 11,
+                Text(
+                  'Hope',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 9,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Builder(
-                builder: (context) {
-                  final lang = context.read<LanguageProvider>();
-                  return Text(
-                    lang.membersUnit(membersCount),
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 10,
-                    ),
-                  );
-                },
-              ),
-            ],
+                Builder(
+                  builder: (context) {
+                    final lang = context.read<LanguageProvider>();
+                    return Text(
+                      lang.membersUnit(membersCount),
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 8,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ],

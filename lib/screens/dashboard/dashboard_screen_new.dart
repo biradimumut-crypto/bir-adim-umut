@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
-import 'dart:math' as math;
 import '../../services/auth_service.dart';
 import '../../services/step_conversion_service.dart';
 import '../../models/user_model.dart';
@@ -41,7 +39,6 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
 
   // Cooldown
   bool _canConvert = true;
-  int _cooldownSeconds = 0;
   Timer? _cooldownTimer;
 
   @override
@@ -248,7 +245,9 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             radius: 20,
             backgroundColor: const Color(0xFF6EC6B5),
             child: Text(
-              _currentUser?.fullName?.substring(0, 1).toUpperCase() ?? 'U',
+              (_currentUser?.fullName ?? 'U').isNotEmpty 
+                  ? (_currentUser?.fullName ?? 'U')[0].toUpperCase() 
+                  : 'U',
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             ),
           ),

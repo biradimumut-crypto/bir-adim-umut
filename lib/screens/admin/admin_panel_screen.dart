@@ -13,6 +13,10 @@ import 'admin_comments_screen.dart';
 import 'admin_analytics_screen.dart';
 import 'admin_logs_screen.dart';
 import 'admin_dashboard_detail_screen.dart';
+import 'admin_produced_hope_detail_screen.dart';
+import 'admin_donated_hope_detail_screen.dart';
+import 'admin_ad_revenue_detail_screen.dart';
+import 'admin_monthly_hope_value_screen.dart';
 
 /// Ana admin paneli ekranı - Yenilenmiş Dashboard
 class AdminPanelScreen extends StatefulWidget {
@@ -34,6 +38,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   ReferralAnalytics? _referralAnalytics;
   DonationAnalytics? _donationAnalytics;
   AdminStatsModel? _stats;
+  
+  // Sistem özeti verileri
+  SystemSummaryStats? _systemSummary;
 
   @override
   void initState() {
@@ -58,26 +65,69 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Future<void> _loadAllData() async {
     setState(() => _isLoading = true);
     try {
-      final results = await Future.wait([
-        _adminService.getAdminStats(),
-        _adminService.getDailyStepAnalytics(),
-        _adminService.getCarryoverAnalytics(),
-        _adminService.getReferralAnalytics(),
-        _adminService.getDonationAnalytics(),
-      ]);
+      // Her bir veriyi ayrı ayrı yükle, bir tanesi hata verse diğerleri etkilenmesin
+      AdminStatsModel? stats;
+      DailyStepAnalytics? dailySteps;
+      CarryoverAnalytics? carryover;
+      ReferralAnalytics? referral;
+      DonationAnalytics? donation;
+      SystemSummaryStats? systemSummary;
+      
+      try {
+        stats = await _adminService.getAdminStats();
+        debugPrint('✅ getAdminStats başarılı');
+      } catch (e) {
+        debugPrint('❌ getAdminStats hatası: $e');
+      }
+      
+      try {
+        dailySteps = await _adminService.getDailyStepAnalytics();
+        debugPrint('✅ getDailyStepAnalytics başarılı');
+      } catch (e) {
+        debugPrint('❌ getDailyStepAnalytics hatası: $e');
+      }
+      
+      try {
+        carryover = await _adminService.getCarryoverAnalytics();
+        debugPrint('✅ getCarryoverAnalytics başarılı');
+      } catch (e) {
+        debugPrint('❌ getCarryoverAnalytics hatası: $e');
+      }
+      
+      try {
+        referral = await _adminService.getReferralAnalytics();
+        debugPrint('✅ getReferralAnalytics başarılı');
+      } catch (e) {
+        debugPrint('❌ getReferralAnalytics hatası: $e');
+      }
+      
+      try {
+        donation = await _adminService.getDonationAnalytics();
+        debugPrint('✅ getDonationAnalytics başarılı');
+      } catch (e) {
+        debugPrint('❌ getDonationAnalytics hatası: $e');
+      }
+      
+      try {
+        systemSummary = await _adminService.getSystemSummaryStats();
+        debugPrint('✅ getSystemSummaryStats başarılı');
+      } catch (e) {
+        debugPrint('❌ getSystemSummaryStats hatası: $e');
+      }
       
       if (mounted) {
         setState(() {
-          _stats = results[0] as AdminStatsModel;
-          _dailyStepAnalytics = results[1] as DailyStepAnalytics;
-          _carryoverAnalytics = results[2] as CarryoverAnalytics;
-          _referralAnalytics = results[3] as ReferralAnalytics;
-          _donationAnalytics = results[4] as DonationAnalytics;
+          _stats = stats;
+          _dailyStepAnalytics = dailySteps;
+          _carryoverAnalytics = carryover;
+          _referralAnalytics = referral;
+          _donationAnalytics = donation;
+          _systemSummary = systemSummary;
           _isLoading = false;
         });
       }
     } catch (e) {
-      debugPrint('Dashboard veri yükleme hatası: $e');
+      debugPrint('Dashboard veri yükleme genel hatası: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -356,7 +406,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               Expanded(
                 child: _buildMiniStat(
                   'Toplam Hope',
-                  '${_formatNumber(stats.totalHopeConverted.toInt())} H',
+                  '${_formatNumber((_systemSummary?.producedHope ?? stats.totalHopeConverted).toInt())} H',
                   Icons.favorite_rounded,
                 ),
               ),
@@ -586,8 +636,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
-  /// Ek Bilgiler Bölümü
+  /// Ek Bilgiler Bölümü - Yeni 4 Kart Tasarımı
   Widget _buildAdditionalInfo(AdminStatsModel stats) {
+    final summary = _systemSummary ?? SystemSummaryStats.empty();
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -597,11 +649,23 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Sistem Özeti',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          // Başlık
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Sistem Özeti',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              Tooltip(
+                message: 'Üretilen = Bağışlanan + Kalan',
+                child: Icon(Icons.info_outline, size: 16, color: Colors.grey[500]),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
+          
+          // Üst satır: Takım, Vakıf, Topluluk, Birey
           Row(
             children: [
               Expanded(
@@ -622,18 +686,158 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ],
           ),
           const SizedBox(height: 12),
+          
+          // Alt satır: 4 Ana Kart (Üretilen, Bağışlanan, Reklam, Kalan)
           Row(
             children: [
+              // Üretilen Hope
               Expanded(
-                child: _buildInfoChip('Cüzdanlarda', '${stats.hopeInWallets.toStringAsFixed(0)} H', Icons.account_balance_wallet),
+                child: _buildSystemSummaryCard(
+                  title: 'Üretilen',
+                  value: '${summary.producedHope.toStringAsFixed(0)} H',
+                  icon: Icons.eco_rounded,
+                  color: const Color(0xFF6EC6B5),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminProducedHopeDetailScreen()),
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
+              // Bağışlanan Hope
               Expanded(
-                child: _buildInfoChip('2x Bonus', '${stats.bonusHope.toStringAsFixed(0)} H', Icons.double_arrow),
+                child: _buildSystemSummaryCard(
+                  title: 'Bağışlanan',
+                  value: '${summary.donatedHope.toStringAsFixed(0)} H',
+                  icon: Icons.volunteer_activism_rounded,
+                  color: const Color(0xFF9B59B6),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminDonatedHopeDetailScreen()),
+                  ),
+                ),
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              // Reklam Geliri
+              Expanded(
+                child: _buildSystemSummaryCard(
+                  title: 'Reklam Geliri',
+                  value: '${summary.totalAdRevenue.toStringAsFixed(2)} ₺',
+                  icon: Icons.monetization_on_rounded,
+                  color: const Color(0xFF2ECC71),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminAdRevenueDetailScreen()),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Aylık Hope Değeri
+              Expanded(
+                child: _buildSystemSummaryCard(
+                  title: 'Hope/TL',
+                  value: 'Yönet',
+                  icon: Icons.calculate_rounded,
+                  color: const Color(0xFF9B59B6),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminMonthlyHopeValueScreen()),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+
         ],
+      ),
+    );
+  }
+
+  /// Sistem Özeti Kartı
+  Widget _buildSystemSummaryCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withOpacity(0.3)),
+          boxShadow: onTap != null ? [
+            BoxShadow(
+              color: color.withOpacity(0.1),
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
+          ] : null,
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                ),
+                if (onTap != null) ...[
+                  const SizedBox(width: 2),
+                  Icon(Icons.arrow_forward_ios, size: 8, color: Colors.grey[400]),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoChipWithTooltip(String label, String value, IconData icon, String tooltip) {
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey[300]!),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 16, color: Colors.grey[600]),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+            Text(
+              label,
+              style: TextStyle(fontSize: 9, color: Colors.grey[500]),
+            ),
+          ],
+        ),
       ),
     );
   }

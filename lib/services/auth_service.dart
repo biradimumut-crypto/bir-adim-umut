@@ -356,6 +356,131 @@ class AuthService {
     }
   }
 
+  /// Google/Apple ile kayıt sonrası referral kodlarını işle
+  /// Bu metod, social login sonrası referral dialog'dan çağrılır
+  Future<Map<String, dynamic>> processReferralCodesForSocialLogin({
+    required String userId,
+    String? teamReferralCode,
+    String? personalReferralCode,
+  }) async {
+    try {
+      String? targetTeamId;
+      String? referrerUserId;
+      int totalBonusSteps = 0;
+
+      // 1. Takım referral kodu varsa takımı bul ve kullanıcıyı ekle
+      if (teamReferralCode != null && teamReferralCode.isNotEmpty) {
+        final teamQuery = await _firestore
+            .collection('teams')
+            .where('referral_code', isEqualTo: teamReferralCode.toUpperCase())
+            .limit(1)
+            .get();
+
+        if (teamQuery.docs.isNotEmpty) {
+          final teamDoc = teamQuery.docs.first;
+          targetTeamId = teamDoc.id;
+
+          // Kullanıcıyı takıma ekle
+          await _firestore.collection('users').doc(userId).update({
+            'current_team_id': targetTeamId,
+          });
+
+          // Team member olarak ekle
+          final userDoc = await _firestore.collection('users').doc(userId).get();
+          final userData = userDoc.data();
+          
+          await _firestore
+              .collection('teams')
+              .doc(targetTeamId)
+              .collection('team_members')
+              .doc(userId)
+              .set({
+            'user_id': userId,
+            'display_name': userData?['masked_name'] ?? userData?['full_name'] ?? 'Kullanıcı',
+            'joined_at': Timestamp.now(),
+            'role': 'member',
+            'member_total_hope': 0.0,
+            'member_daily_steps': 0,
+          });
+
+          final teamData = teamDoc.data();
+          final memberIds = List<String>.from(teamData['member_ids'] ?? []);
+          memberIds.add(userId);
+
+          await _firestore.collection('teams').doc(targetTeamId).update({
+            'members_count': FieldValue.increment(1),
+            'member_ids': memberIds,
+          });
+
+          // Takım referral bonusu
+          const teamReferralBonus = 100000;
+          await _firestore.collection('teams').doc(targetTeamId).update({
+            'team_bonus_steps': FieldValue.increment(teamReferralBonus),
+          });
+          await _firestore.collection('users').doc(userId).update({
+            'referral_bonus_steps': FieldValue.increment(teamReferralBonus),
+          });
+          
+          totalBonusSteps += teamReferralBonus;
+        }
+      }
+
+      // 2. Kişisel referral kodu varsa davet edeni bul
+      if (personalReferralCode != null && personalReferralCode.isNotEmpty) {
+        final referrerQuery = await _firestore
+            .collection('users')
+            .where('personal_referral_code', isEqualTo: personalReferralCode.toUpperCase())
+            .limit(1)
+            .get();
+
+        if (referrerQuery.docs.isNotEmpty) {
+          referrerUserId = referrerQuery.docs.first.id;
+          final referralBonus = 100000;
+          final today = DateTime.now();
+          final dateStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
+          // Her iki tarafa bonus ekle
+          await _addReferralBonusSteps(referrerUserId, referralBonus, dateStr, userId, null);
+          await _addReferralBonusSteps(userId, referralBonus, dateStr, referrerUserId, null);
+
+          // Davet edenin referral_count'unu artır
+          await _firestore.collection('users').doc(referrerUserId).update({
+            'referral_count': FieldValue.increment(1),
+          });
+
+          // Davet edilenin referred_by alanını güncelle
+          await _firestore.collection('users').doc(userId).update({
+            'referred_by': referrerUserId,
+          });
+
+          totalBonusSteps += referralBonus;
+        }
+      }
+
+      String message = '';
+      if (targetTeamId != null && referrerUserId != null) {
+        message = 'Takıma katıldınız ve ${_formatBonusSteps(totalBonusSteps)} bonus adım kazandınız!';
+      } else if (targetTeamId != null) {
+        message = 'Takıma katıldınız ve 100.000 bonus adım kazandınız!';
+      } else if (referrerUserId != null) {
+        message = '100.000 bonus adım kazandınız!';
+      }
+
+      return {
+        'success': true,
+        'teamId': targetTeamId,
+        'referrerUserId': referrerUserId,
+        'totalBonusSteps': totalBonusSteps,
+        'message': message,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
   /// Firebase Hata Kodlarını Döndür (çeviri language_provider'da yapılacak)
   String _getFirebaseErrorMessage(String code) {
     // Hata kodunu döndür, çeviri UI'da yapılacak
@@ -417,6 +542,9 @@ class AuthService {
         // Yeni kullanıcı - otomatik kayıt yap
         final fullName = user.displayName ?? 'Kullanıcı';
         final maskedName = UserModel.maskName(fullName);
+        
+        // Kişisel referral kodu oluştur
+        final personalReferralCode = await _generateUniquePersonalReferralCode();
 
         await _firestore.collection('users').doc(user.uid).set({
           'full_name': fullName,
@@ -433,6 +561,8 @@ class AuthService {
           'last_step_sync_time': null,
           'device_tokens': [],
           'auth_provider': 'google',
+          'personal_referral_code': personalReferralCode,
+          'referral_count': 0,
         });
         
         // FCM token'ı güncelle
@@ -498,6 +628,9 @@ class AuthService {
         // Yeni kullanıcı - otomatik kayıt yap
         final fullName = user.displayName ?? 'Apple Kullanıcısı';
         final maskedName = UserModel.maskName(fullName);
+        
+        // Kişisel referral kodu oluştur
+        final personalReferralCode = await _generateUniquePersonalReferralCode();
 
         await _firestore.collection('users').doc(user.uid).set({
           'full_name': fullName,
@@ -514,6 +647,8 @@ class AuthService {
           'last_step_sync_time': null,
           'device_tokens': [],
           'auth_provider': 'apple',
+          'personal_referral_code': personalReferralCode,
+          'referral_count': 0,
         });
         
         // FCM token'ı güncelle
@@ -550,5 +685,82 @@ class AuthService {
         'error': 'Apple girişi sırasında hata: $e',
       };
     }
+  }
+
+  /// Google/Apple kullanıcısına e-posta/şifre ile giriş ekleme
+  /// Bu, sosyal login kullanıcılarının e-posta/şifre ile de giriş yapabilmesini sağlar
+  Future<Map<String, dynamic>> createPasswordForSocialUser({
+    required String password,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'Kullanıcı oturumu bulunamadı',
+        };
+      }
+
+      final email = user.email;
+      if (email == null || email.isEmpty) {
+        return {
+          'success': false,
+          'error': 'E-posta adresi bulunamadı',
+        };
+      }
+
+      // E-posta/şifre credential oluştur ve mevcut hesaba bağla
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: password,
+      );
+
+      await user.linkWithCredential(credential);
+
+      // Firestore'da auth_provider'a 'email' ekle
+      await _firestore.collection('users').doc(user.uid).update({
+        'has_password': true,
+        'auth_provider': 'email', // Artık e-posta ile de giriş yapabilir
+      });
+
+      return {
+        'success': true,
+        'message': 'Şifre başarıyla oluşturuldu! Artık e-posta ve şifre ile de giriş yapabilirsiniz.',
+      };
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'provider-already-linked') {
+        return {
+          'success': false,
+          'error': 'Bu hesapta zaten bir şifre tanımlı.',
+        };
+      } else if (e.code == 'credential-already-in-use') {
+        return {
+          'success': false,
+          'error': 'Bu e-posta başka bir hesapla ilişkili.',
+        };
+      } else if (e.code == 'weak-password') {
+        return {
+          'success': false,
+          'error': 'Şifre çok zayıf. En az 6 karakter olmalı.',
+        };
+      }
+      return {
+        'success': false,
+        'error': _getFirebaseErrorMessage(e.code),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Şifre oluşturma hatası: $e',
+      };
+    }
+  }
+
+  /// Kullanıcının şifresi var mı kontrol et
+  Future<bool> hasEmailPasswordProvider() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    
+    return user.providerData.any((provider) => provider.providerId == 'password');
   }
 }

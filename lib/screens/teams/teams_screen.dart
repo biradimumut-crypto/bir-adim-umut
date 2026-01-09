@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
@@ -612,12 +611,6 @@ class _TeamsScreenState extends State<TeamsScreen> with WidgetsBindingObserver {
     try {
       final teamId = invite['teamId'];
       final notificationId = invite['notificationId'];
-      
-      // Kullanıcı bilgilerini al
-      final userDoc = await _firestore.collection('users').doc(uid).get();
-      final userData = userDoc.data();
-      final userName = userData?['full_name'] ?? 'Üye';
-      final maskedName = userData?['masked_name'] ?? userName;
       
       final batch = _firestore.batch();
       
@@ -1588,7 +1581,6 @@ class _TeamsScreenState extends State<TeamsScreen> with WidgetsBindingObserver {
 
   /// Katılma isteği kartı
   Widget _buildJoinRequestCard(Map<String, dynamic> request, StateSetter setDialogState) {
-    final lang = context.read<LanguageProvider>();
     final name = request['senderName'] ?? 'Kullanıcı';
     final photo = request['senderPhoto'];
     
@@ -1689,12 +1681,6 @@ class _TeamsScreenState extends State<TeamsScreen> with WidgetsBindingObserver {
     if (senderUid == null || teamId == null) return;
     
     try {
-      // Kullanıcı bilgilerini al
-      final userDoc = await _firestore.collection('users').doc(senderUid).get();
-      final userData = userDoc.data();
-      final userName = userData?['full_name'] ?? 'Üye';
-      final maskedName = userData?['masked_name'] ?? userName;
-      
       final batch = _firestore.batch();
       
       // 1. Kullanıcının current_team_id'sini güncelle

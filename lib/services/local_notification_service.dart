@@ -32,23 +32,23 @@ class LocalNotificationService {
   final List<Map<String, String>> _morningMessagesTr = [
     {
       'title': 'Günaydın! ☀️',
-      'body': 'Bugün kaç adım atacaksın? Her adım bir umut, her umut bir gülümseme 😊',
+      'body': 'Bugün kaç adım atacaksın? Her adım bir umut!',
     },
     {
       'title': 'Yeni Bir Gün! 🌟',
-      'body': 'Dünü geride bırak, bugün yeni fırsatlar var. Haydi, harekete geç! 🚶',
+      'body': 'Adımların sadece seni değil, bir başkasının hayatını da ileri taşıyor. Hadi başla!',
     },
     {
-      'title': 'Hazır mısın? 💪',
-      'body': 'Bugün küçük bir adım, yarın büyük bir değişim. Sen yapabilirsin!',
+      'title': 'Harekete Geç! 💪',
+      'body': 'Adımlar sayılıyor, umut birikiyor. Gün seninle başlasın!',
     },
     {
       'title': 'Umut Dolu Bir Gün! 💚',
-      'body': 'Attığın her adım birinin hayatına dokunuyor. Bugün de fark yarat!',
+      'body': 'Attığın her adım biyerlere umut ekiyor. Bugün de fark yarat!',
     },
     {
       'title': 'Merhaba Şampiyon! 🏆',
-      'body': 'Bugün de adımlarınla dünyayı değiştirmeye hazır mısın?',
+      'body': 'Bugün de adımlarınla umut olmaya hazır mısın?',
     },
   ];
 
@@ -73,6 +73,38 @@ class LocalNotificationService {
     {
       'title': 'Hello Champion! 🏆',
       'body': 'Are you ready to change the world with your steps today?',
+    },
+  ];
+
+  /// Akşam hatırlatma mesajları - Türkçe
+  final List<Map<String, String>> _eveningMessagesTr = [
+    {
+      'title': 'Adımların Seni Bekliyor! 🌙',
+      'body': 'Bugün {steps} adım attın ama henüz dönüştürmedin. Gece olmadan Hope\'a çevir! 💚',
+    },
+    {
+      'title': '💫 Belki fark etmedin…',
+      'body': 'Bugün attığın adımlar birinin yarını olabilir.',
+    },
+    {
+      'title': '🕊️ Küçük bir dokunuş yeterli.',
+      'body': 'Adımların bir iyiliğe dönüşsün.',
+    },
+  ];
+
+  /// Akşam hatırlatma mesajları - İngilizce
+  final List<Map<String, String>> _eveningMessagesEn = [
+    {
+      'title': 'Your Steps Are Waiting! 🌙',
+      'body': 'You took {steps} steps today but haven\'t converted them yet. Convert to Hope before midnight! 💚',
+    },
+    {
+      'title': '💫 Maybe you didn\'t notice…',
+      'body': 'The steps you took today could be someone\'s tomorrow.',
+    },
+    {
+      'title': '🕊️ A small touch is enough.',
+      'body': 'Let your steps turn into kindness.',
     },
   ];
 
@@ -441,13 +473,20 @@ class LocalNotificationService {
 
     // Dil kontrolü yap
     final isTurkish = await _isTurkish();
+    
+    // Rastgele mesaj seç
+    final random = Random();
+    final messages = isTurkish ? _eveningMessagesTr : _eveningMessagesEn;
+    final message = messages[random.nextInt(messages.length)];
+    
+    // {steps} placeholder'ını değiştir
+    final title = message['title']!;
+    final body = message['body']!.replaceAll('{steps}', unconvertedSteps.toString());
 
     await _notifications.zonedSchedule(
       eveningReminderId,
-      isTurkish ? 'Adımların Seni Bekliyor! 🌙' : 'Your Steps Are Waiting! 🌙',
-      isTurkish 
-          ? 'Bugün $unconvertedSteps adım attın ama henüz dönüştürmedin. Gece olmadan Hope\'a çevir! 💚'
-          : 'You took $unconvertedSteps steps today but haven\'t converted them yet. Convert to Hope before midnight! 💚',
+      title,
+      body,
       _nextInstanceOfTime(20, 0), // Akşam 20:00
       NotificationDetails(
         android: _getAndroidDetails(

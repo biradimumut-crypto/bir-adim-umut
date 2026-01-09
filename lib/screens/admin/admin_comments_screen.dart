@@ -314,20 +314,25 @@ class _AdminCommentsScreenState extends State<AdminCommentsScreen> {
                             
                             // İşlem butonu
                             SizedBox(
-                              width: 80,
+                              width: 100,
                               child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
                                     onPressed: () => _showCommentDetail(comment),
-                                    icon: const Icon(Icons.visibility, size: 20),
+                                    icon: const Icon(Icons.visibility, size: 18),
                                     tooltip: 'Detay',
                                     color: Colors.blue,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                                   ),
                                   IconButton(
                                     onPressed: () => _deleteComment(comment['id']),
-                                    icon: const Icon(Icons.delete, size: 20),
+                                    icon: const Icon(Icons.delete, size: 18),
                                     tooltip: 'Sil',
                                     color: Colors.red,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                                   ),
                                 ],
                               ),

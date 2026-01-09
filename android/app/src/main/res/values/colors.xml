@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="io_flutter_splash_screen_background">#FFFFFF</color>
-    <color name="io_flutter_splash_screen_branding_color">#FF6B35</color>
+    <color name="io_flutter_splash_screen_branding_color">#E07A5F</color>
+    <color name="splash_color">#FFFFFF</color>
 </resources>

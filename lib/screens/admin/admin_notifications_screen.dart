@@ -940,10 +940,17 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> wit
       );
 
       if (mounted) {
+        final message = result['message'] ?? (_isScheduled ? 'Bildirim zamanlandı!' : 'Bildirim gönderildi!');
+        final sentCount = result['sentCount'] ?? 0;
+        final isNoToken = message.contains('token bulunamadı');
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result['message'] ?? (_isScheduled ? 'Bildirim zamanlandı!' : 'Bildirim gönderildi!')),
-            backgroundColor: Colors.green,
+            content: Text(isNoToken 
+                ? 'Uyarı: Kayıtlı FCM token yok. Kullanıcılar gerçek cihazda uygulamayı açtığında token kaydedilir.'
+                : (sentCount > 0 ? '$sentCount kişiye bildirim gönderildi!' : message)),
+            backgroundColor: isNoToken ? Colors.orange : Colors.green,
+            duration: Duration(seconds: isNoToken ? 5 : 3),
           ),
         );
         

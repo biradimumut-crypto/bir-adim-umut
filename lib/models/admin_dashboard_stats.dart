@@ -196,3 +196,133 @@ class ReferralRecord {
     required this.referralDate,
   });
 }
+
+// ==================== YENİ SİSTEM ÖZETİ MODELLERİ ====================
+
+/// Üretilen Hope Analitiği - 5 kaynak bazlı breakdown
+class ProducedHopeAnalytics {
+  final double totalProducedHope;        // Toplam üretilen Hope
+  final double hopeFromDailySteps;       // Günlük adımlardan
+  final double hopeFromCarryover;        // Taşınan adımlardan
+  final double hopeFrom2xBonus;          // 2x bonus'tan (progress bar)
+  final double hopeFromReferralBonus;    // Referans bonusundan
+  final double hopeFromTeamBonus;        // Takım bonusundan
+
+  ProducedHopeAnalytics({
+    required this.totalProducedHope,
+    required this.hopeFromDailySteps,
+    required this.hopeFromCarryover,
+    required this.hopeFrom2xBonus,
+    required this.hopeFromReferralBonus,
+    required this.hopeFromTeamBonus,
+  });
+
+  factory ProducedHopeAnalytics.empty() {
+    return ProducedHopeAnalytics(
+      totalProducedHope: 0,
+      hopeFromDailySteps: 0,
+      hopeFromCarryover: 0,
+      hopeFrom2xBonus: 0,
+      hopeFromReferralBonus: 0,
+      hopeFromTeamBonus: 0,
+    );
+  }
+}
+
+/// Bağışlanan Hope Analitiği - Kurum bazlı breakdown
+class DonatedHopeAnalytics {
+  final double totalDonatedHope;         // Toplam bağışlanan Hope
+  final int totalDonationCount;          // Toplam bağış adedi
+  final Map<String, CharityDonationBreakdown> charityBreakdown; // Kurum bazlı
+
+  DonatedHopeAnalytics({
+    required this.totalDonatedHope,
+    required this.totalDonationCount,
+    required this.charityBreakdown,
+  });
+
+  factory DonatedHopeAnalytics.empty() {
+    return DonatedHopeAnalytics(
+      totalDonatedHope: 0,
+      totalDonationCount: 0,
+      charityBreakdown: {},
+    );
+  }
+}
+
+/// Kurum bağış detayı
+class CharityDonationBreakdown {
+  final String charityId;
+  final String charityName;
+  final String? charityLogoUrl;
+  final double totalHope;
+  final int donationCount;
+
+  CharityDonationBreakdown({
+    required this.charityId,
+    required this.charityName,
+    this.charityLogoUrl,
+    required this.totalHope,
+    required this.donationCount,
+  });
+}
+
+/// Reklam Geliri Analitiği - Reklam türü bazlı breakdown
+class AdRevenueAnalytics {
+  final double totalRevenue;             // Toplam gelir (₺)
+  final double interstitialRevenue;      // Geçişli reklam geliri
+  final double bannerRevenue;            // Banner reklam geliri
+  final double rewardedRevenue;          // Ödüllü reklam geliri
+  final int totalAdImpressions;          // Toplam gösterim
+  final int interstitialImpressions;     // Geçişli gösterim
+  final int bannerImpressions;           // Banner gösterim
+  final int rewardedImpressions;         // Ödüllü gösterim
+
+  AdRevenueAnalytics({
+    required this.totalRevenue,
+    required this.interstitialRevenue,
+    required this.bannerRevenue,
+    required this.rewardedRevenue,
+    required this.totalAdImpressions,
+    required this.interstitialImpressions,
+    required this.bannerImpressions,
+    required this.rewardedImpressions,
+  });
+
+  factory AdRevenueAnalytics.empty() {
+    return AdRevenueAnalytics(
+      totalRevenue: 0,
+      interstitialRevenue: 0,
+      bannerRevenue: 0,
+      rewardedRevenue: 0,
+      totalAdImpressions: 0,
+      interstitialImpressions: 0,
+      bannerImpressions: 0,
+      rewardedImpressions: 0,
+    );
+  }
+}
+
+/// Sistem Özeti Kartları için birleşik model
+class SystemSummaryStats {
+  final double producedHope;             // Üretilen toplam Hope
+  final double donatedHope;              // Bağışlanan toplam Hope
+  final double remainingHope;            // Kalan Hope (cüzdanlarda)
+  final double totalAdRevenue;           // Toplam reklam geliri
+
+  SystemSummaryStats({
+    required this.producedHope,
+    required this.donatedHope,
+    required this.remainingHope,
+    required this.totalAdRevenue,
+  });
+
+  factory SystemSummaryStats.empty() {
+    return SystemSummaryStats(
+      producedHope: 0,
+      donatedHope: 0,
+      remainingHope: 0,
+      totalAdRevenue: 0,
+    );
+  }
+}

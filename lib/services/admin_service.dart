@@ -39,45 +39,46 @@ class AdminService {
 
   /// Genel istatistikleri getir
   Future<AdminStatsModel> getAdminStats() async {
-    // Toplam kullanıcı sayısı
-    final usersSnapshot = await _firestore.collection('users').count().get();
-    final totalUsers = usersSnapshot.count ?? 0;
+    try {
+      // Toplam kullanıcı sayısı
+      final usersSnapshot = await _firestore.collection('users').count().get();
+      final totalUsers = usersSnapshot.count ?? 0;
 
-    // ============================================================
-    // GÜNLÜK AKTİF KULLANICILAR - TUTARLI HESAPLAMA
-    // ============================================================
-    // Bugün aktif = Bugün için daily_steps subcollection'ında kaydı olan kullanıcılar
-    // Bu, Adım İstatistikleri sayfasındaki "Bugün Aktif" ile aynı hesaplama
-    
-    final today = DateTime.now();
-    final todayKey = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-    final Set<String> activeUserIds = {};
-    
-    // Tüm kullanıcıların daily_steps subcollection'larını kontrol et
-    final allUsersForActive = await _firestore.collection('users').get();
-    
-    for (var userDoc in allUsersForActive.docs) {
-      try {
-        final todayStepDoc = await _firestore
-            .collection('users')
-            .doc(userDoc.id)
-            .collection('daily_steps')
-            .doc(todayKey)
-            .get();
-        
-        if (todayStepDoc.exists) {
-          activeUserIds.add(userDoc.id);
+      // ============================================================
+      // GÜNLÜK AKTİF KULLANICILAR - TUTARLI HESAPLAMA
+      // ============================================================
+      // Bugün aktif = Bugün için daily_steps subcollection'ında kaydı olan kullanıcılar
+      // Bu, Adım İstatistikleri sayfasındaki "Bugün Aktif" ile aynı hesaplama
+      
+      final today = DateTime.now();
+      final todayKey = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+      final Set<String> activeUserIds = {};
+      
+      // Tüm kullanıcıların daily_steps subcollection'larını kontrol et
+      final allUsersForActive = await _firestore.collection('users').get();
+      
+      for (var userDoc in allUsersForActive.docs) {
+        try {
+          final todayStepDoc = await _firestore
+              .collection('users')
+              .doc(userDoc.id)
+              .collection('daily_steps')
+              .doc(todayKey)
+              .get();
+          
+          if (todayStepDoc.exists) {
+            activeUserIds.add(userDoc.id);
+          }
+        } catch (e) {
+          // Devam et
         }
-      } catch (e) {
-        // Devam et
       }
-    }
-    
-    int dailyActiveUsers = activeUserIds.length;
-    print('📊 Bugün aktif kullanıcı (daily_steps kaydı olan): $dailyActiveUsers');
+      
+      int dailyActiveUsers = activeUserIds.length;
+      print('📊 Bugün aktif kullanıcı (daily_steps kaydı olan): $dailyActiveUsers');
 
-    // Toplam takım sayısı - getAllTeams ile tutarlı olması için aynı yöntemi kullan
-    final teamsSnapshot = await _firestore.collection('teams').get();
+      // Toplam takım sayısı - getAllTeams ile tutarlı olması için aynı yöntemi kullan
+      final teamsSnapshot = await _firestore.collection('teams').get();
     final totalTeams = teamsSnapshot.docs.length;
 
     // Vakıf sayısı
@@ -187,7 +188,7 @@ class AdminService {
     // Çünkü sistem kapalı - Hope sadece bu iki yerde olabilir!
     
     double totalHopeInWallets = 0; // Cüzdanlardaki Hope
-    double totalHopeDonated = totalDonationsAmount; // Bağışlanan Hope
+    double totalHopeDonated = 0; // Bağışlanan Hope (users.lifetime_donated_hope'tan)
     
     // Referral bonus adımlarını da hesapla
     int totalReferralBonusSteps = 0; // Verilen toplam bonus adım
@@ -203,6 +204,12 @@ class AdminService {
       final walletHope = data['wallet_balance_hope'];
       if (walletHope != null) {
         totalHopeInWallets += (walletHope is int) ? walletHope.toDouble() : (walletHope as num).toDouble();
+      }
+      
+      // Bağışlanan Hope (lifetime_donated_hope'tan - TEK DOĞRU KAYNAK)
+      final donatedHope = data['lifetime_donated_hope'];
+      if (donatedHope != null) {
+        totalHopeDonated += (donatedHope is int) ? donatedHope.toDouble() : (donatedHope as num).toDouble();
       }
       
       // Referral bonus adımları (100.000 adım per referral)
@@ -329,7 +336,7 @@ class AdminService {
       monthlySteps: monthlyStats['steps'] ?? 0,
       totalHopeConverted: totalHopeProduced,
       monthlyHopeConverted: totalHopeProduced, // Bu ay = Toplam (çünkü uygulama bu ay başladı!)
-      totalDonations: totalDonationsAmount,
+      totalDonations: totalHopeDonated, // users.lifetime_donated_hope'tan
       monthlyDonations: (monthlyStats['donations'] ?? 0).toDouble(),
       bonusHope: bonusHopeAmount,
       hopeInWallets: totalHopeInWallets,
@@ -351,6 +358,11 @@ class AdminService {
       todayAdsWatched: adStats['todayAdsWatched'] ?? 0,
       lastUpdated: DateTime.now(),
     );
+    } catch (e) {
+      print('❌ getAdminStats hatası: $e');
+      // Hata durumunda boş model döndür
+      return AdminStatsModel.empty();
+    }
   }
 
   // ==================== REKLAM İSTATİSTİKLERİ ====================
@@ -730,6 +742,121 @@ class AdminService {
     });
   }
 
+  /// Kullanıcıyı ve tüm verilerini sil
+  Future<void> deleteUser(String uid, String displayName) async {
+    // 1. Kullanıcının alt koleksiyonlarını sil (tek tek)
+    final subCollections = [
+      'activity_logs',
+      'activity_log', 
+      'badges',
+      'daily_steps',
+      'ad_logs',
+      'sessions',
+      'daily_sessions',
+      'notifications',
+    ];
+    
+    for (final subCollection in subCollections) {
+      try {
+        final docs = await _firestore
+            .collection('users')
+            .doc(uid)
+            .collection(subCollection)
+            .get();
+        
+        for (final doc in docs.docs) {
+          await doc.reference.delete();
+        }
+      } catch (e) {
+        debugPrint('Alt koleksiyon silme hatası ($subCollection): $e');
+      }
+    }
+    
+    // 2. Kullanıcının charity_comments yorumlarını sil
+    try {
+      final comments = await _firestore
+          .collection('charity_comments')
+          .where('user_id', isEqualTo: uid)
+          .get();
+      
+      for (final doc in comments.docs) {
+        await doc.reference.delete();
+      }
+    } catch (e) {
+      debugPrint('Yorum silme hatası: $e');
+    }
+    
+    // 3. Kullanıcının takımdan çıkar (eğer takımda ise) - GELİŞTİRİLMİŞ
+    try {
+      final userDoc = await _firestore.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        final userData = userDoc.data();
+        final teamId = userData?['current_team_id'];
+        
+        debugPrint('🔍 Kullanıcı takım kontrolü - teamId: $teamId');
+        
+        if (teamId != null && teamId.toString().isNotEmpty) {
+          // Takım var mı kontrol et
+          final teamDoc = await _firestore.collection('teams').doc(teamId).get();
+          
+          if (teamDoc.exists) {
+            final teamData = teamDoc.data();
+            final currentMemberCount = teamData?['members_count'] ?? 0;
+            final memberIds = List<String>.from(teamData?['member_ids'] ?? []);
+            
+            debugPrint('📊 Takım mevcut üye sayısı: $currentMemberCount');
+            debugPrint('📊 member_ids listesi: $memberIds');
+            
+            // Takım üyesi kaydını sil
+            try {
+              await _firestore
+                  .collection('teams')
+                  .doc(teamId)
+                  .collection('team_members')
+                  .doc(uid)
+                  .delete();
+              debugPrint('✅ team_members kaydı silindi');
+            } catch (e) {
+              debugPrint('⚠️ team_members silme hatası (belki zaten yok): $e');
+            }
+            
+            // Takım verilerini güncelle
+            final updateData = <String, dynamic>{
+              'member_ids': FieldValue.arrayRemove([uid]),
+            };
+            
+            // members_count sadece 0'dan büyükse azalt
+            if (currentMemberCount > 0) {
+              updateData['members_count'] = FieldValue.increment(-1);
+            }
+            
+            await _firestore.collection('teams').doc(teamId).update(updateData);
+            debugPrint('✅ Takım güncellendi - üye sayısı ${currentMemberCount > 0 ? currentMemberCount - 1 : 0}');
+          } else {
+            debugPrint('⚠️ Takım bulunamadı: $teamId');
+          }
+        } else {
+          debugPrint('ℹ️ Kullanıcı herhangi bir takımda değil');
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Takım güncelleme hatası: $e');
+    }
+    
+    // 4. Ana kullanıcı dokümanını sil
+    await _firestore.collection('users').doc(uid).delete();
+    debugPrint('✅ Kullanıcı dokümanı silindi: $uid');
+    
+    // Admin log ekle
+    await _firestore.collection('admin_logs').add({
+      'action': 'delete_user',
+      'target_uid': uid,
+      'target_name': displayName,
+      'admin_uid': _auth.currentUser?.uid,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
   /// Kullanıcının Hope bakiyesini güncelle
   Future<void> updateUserBalance(String uid, double newBalance, String reason) async {
     final userDoc = await _firestore.collection('users').doc(uid).get();
@@ -765,13 +892,8 @@ class AdminService {
         .map((doc) => TeamModel.fromFirestore(doc))
         .toList();
     
-    // Tarihe göre sırala (yeniden eskiye), null tarihler en sona
-    teams.sort((a, b) {
-      if (a.createdAt == null && b.createdAt == null) return 0;
-      if (a.createdAt == null) return 1;
-      if (b.createdAt == null) return -1;
-      return b.createdAt!.compareTo(a.createdAt!);
-    });
+    // Tarihe göre sırala (yeniden eskiye)
+    teams.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     
     // Limit uygula
     if (teams.length > limit) {
@@ -1240,7 +1362,7 @@ class AdminService {
         'timestamp': FieldValue.serverTimestamp(),
       });
       
-      return result.data ?? {'success': true, 'sentCount': 0};
+      return result.data;
     } catch (e) {
       debugPrint('Cloud Function hatası: $e');
       
@@ -1330,16 +1452,24 @@ class AdminService {
   /// Tüm rozetleri getir (Firestore'dan veya uygulama içi sabit tanımlardan)
   Future<List<AdminBadgeModel>> getAllBadges() async {
     try {
+      // Index olmadan basit sorgu - client-side sıralama yapacağız
       final snapshot = await _firestore
           .collection('badge_definitions')
-          .orderBy('level')
-          .orderBy('criteria_type')
           .get();
 
       if (snapshot.docs.isNotEmpty) {
-        return snapshot.docs
+        final badges = snapshot.docs
             .map((doc) => AdminBadgeModel.fromFirestore(doc))
             .toList();
+        
+        // Client-side sıralama
+        badges.sort((a, b) {
+          final levelCompare = a.level.index.compareTo(b.level.index);
+          if (levelCompare != 0) return levelCompare;
+          return a.criteriaType.index.compareTo(b.criteriaType.index);
+        });
+        
+        return badges;
       }
     } catch (e) {
       print('Firestore rozet okuma hatası: $e');
@@ -1520,7 +1650,6 @@ class AdminService {
     int carryOverTotalSteps = 0;       // Bu ay aktarılan toplam adım (dönüştürülmemiş günlük adımlar)
     int carryOverConvertedSteps = 0;   // Bu ayın aktarılanlarından dönüştürülen
     int carryOverPendingSteps = 0;     // Bu ayın aktarılanlarından bekleyen
-    double carryOverHopeEarned = 0;    // Aktarılanlardan kazanılan Hope
     int carryOverExpiredSteps = 0;     // Önceki ayın dönüştürülmemiş adımları (süresi dolan)
     
     // ==================== BONUS ADIMLAR (DAVET/REFERRAL) ====================
@@ -1534,7 +1663,6 @@ class AdminService {
     int totalDailySteps = 0;           // Tüm zamanlar toplam adım
     int totalConvertedSteps = 0;       // Tüm zamanlar dönüştürülen
     int totalPendingSteps = 0;         // Tüm zamanlar bekleyen
-    double totalHopeConverted = 0;     // Toplam üretilen Hope
     double totalHopeDonated = 0;       // Bağışlanan Hope
     double totalHopeInWallets = 0;     // Cüzdanlardaki Hope
     int activeUsersToday = 0;          // Bugün aktif kullanıcı sayısı
@@ -1632,16 +1760,11 @@ class AdminService {
       final globalDailyStepsSnapshot = await _firestore.collection('daily_steps').get();
       for (var doc in globalDailyStepsSnapshot.docs) {
         final data = doc.data();
-        final steps = data['total_steps'];
-        final converted = data['converted_steps'];
         final docDate = (data['date'] as Timestamp?)?.toDate();
         
-        if (steps != null) {
-          final stepsInt = (steps is int) ? steps : (steps as num).toInt();
-          // Çift sayma olmasın diye sadece subcollection'da olmayan verileri ekle
-          // Bu kontrolü basitleştirmek için şimdilik tümünü ekleyelim
-          // (Gerçek production'da user_id ile kontrol edilmeli)
-        }
+        // Çift sayma olmasın diye sadece subcollection'da olmayan verileri ekle
+        // Bu kontrolü basitleştirmek için şimdilik tümünü ekleyelim
+        // (Gerçek production'da user_id ile kontrol edilmeli)
         
         // Bugün aktif mi? (global koleksiyon için)
         if (docDate != null && docDate.isAfter(todayStart.subtract(const Duration(days: 1)))) {
@@ -1678,16 +1801,30 @@ class AdminService {
     totalBonusPending = totalBonusSteps - totalBonusConverted;
     
     // 2. activity_logs'tan Hope kazanımlarını hesapla
-    // Yeni format: activity_type
+    // Yeni format: activity_type - TÜM dönüşüm türlerini dahil et
     final stepConversionsSnapshot1 = await _firestore
         .collection('activity_logs')
-        .where('activity_type', whereIn: ['step_conversion', 'carryover_conversion', 'bonus_conversion'])
+        .where('activity_type', whereIn: [
+          'step_conversion',
+          'step_conversion_2x',
+          'carryover_conversion',
+          'bonus_conversion',
+          'leaderboard_bonus_conversion',
+          'team_bonus_conversion',
+        ])
         .get();
     
     // Eski format: action_type
     final stepConversionsSnapshot2 = await _firestore
         .collection('activity_logs')
-        .where('action_type', whereIn: ['step_conversion', 'carryover_conversion', 'bonus_conversion'])
+        .where('action_type', whereIn: [
+          'step_conversion',
+          'step_conversion_2x',
+          'carryover_conversion',
+          'bonus_conversion',
+          'leaderboard_bonus_conversion',
+          'team_bonus_conversion',
+        ])
         .get();
     
     // Birleştir ve duplicate kaldır
@@ -1718,19 +1855,18 @@ class AdminService {
       
       if (hopeEarned != null) {
         final hope = (hopeEarned is int) ? hopeEarned.toDouble() : (hopeEarned as num).toDouble();
-        totalHopeConverted += hope;
         
         // Bugünün dönüşümü mü?
         if (createdAt != null && createdAt.isAfter(todayStart)) {
-          if (activityType == 'step_conversion') {
+          if (activityType == 'step_conversion' || activityType == 'step_conversion_2x') {
             todayHopeEarned += hope;
             todayConversionCount++;
             
-            // 2x bonus kontrolü (2500 adım = 50 Hope ise bonus aktif)
+            // 2x bonus kontrolü (step_conversion_2x veya hope > normalHope)
             if (stepsConverted != null) {
               final steps = (stepsConverted is int) ? stepsConverted : (stepsConverted as num).toInt();
               final normalHope = steps / 100.0; // Normal: 100 adım = 1 Hope
-              if (hope > normalHope) {
+              if (activityType == 'step_conversion_2x' || hope > normalHope) {
                 // 2x bonus aktif
                 todayHopeNormal += normalHope;
                 todayHopeBonus += (hope - normalHope);
@@ -1739,14 +1875,19 @@ class AdminService {
               }
             }
           } else if (activityType == 'carryover_conversion') {
-            carryOverHopeEarned += hope;
-          } else if (activityType == 'bonus_conversion') {
+            // Carryover dönüşümlerini de bugünün Hope'una ekle
+            todayHopeEarned += hope;
+            todayConversionCount++;
+            todayHopeNormal += hope;
+          } else if (activityType == 'bonus_conversion' || 
+                     activityType == 'leaderboard_bonus_conversion' ||
+                     activityType == 'team_bonus_conversion') {
             bonusHopeEarned += hope;
           }
-        } else if (createdAt != null && activityType == 'carryover_conversion') {
-          // Geçmiş günlerin carry-over dönüşümleri
-          carryOverHopeEarned += hope;
-        } else if (createdAt != null && activityType == 'bonus_conversion') {
+        } else if (createdAt != null && 
+                   (activityType == 'bonus_conversion' || 
+                    activityType == 'leaderboard_bonus_conversion' ||
+                    activityType == 'team_bonus_conversion')) {
           // Geçmiş günlerin bonus dönüşümleri
           bonusHopeEarned += hope;
         }
@@ -2035,47 +2176,52 @@ class AdminService {
       debugPrint('Donation query error: $e');
     }
     
-    // 4. O güne ait dönüştürme sayısını al
+    // 4. O güne ait dönüştürme sayısını al (tüm türler dahil)
+    // Duplicate önleme: her iki sorguyu birleştir
+    final allConversionDocs = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
     try {
       final conversions1 = await _firestore
           .collection('activity_logs')
-          .where('activity_type', isEqualTo: 'step_conversion')
+          .where('activity_type', whereIn: [
+            'step_conversion',
+            'step_conversion_2x',
+            'carryover_conversion',
+          ])
           .get();
-      
-      for (final doc in conversions1.docs) {
-        final data = doc.data();
-        final timestamp = data['created_at'] ?? data['timestamp'] ?? data['date'];
-        if (timestamp != null && timestamp is Timestamp) {
-          final activityDate = timestamp.toDate();
-          if (activityDate.isAfter(dayStart.subtract(const Duration(seconds: 1))) &&
-              activityDate.isBefore(dayEnd)) {
-            conversionCount++;
-          }
-        }
+      for (var doc in conversions1.docs) {
+        allConversionDocs[doc.id] = doc;
       }
     } catch (e) {
-      debugPrint('Conversion query error: $e');
+      debugPrint('Conversion query 1 error: $e');
     }
     
     try {
       final conversions2 = await _firestore
           .collection('activity_logs')
-          .where('action_type', isEqualTo: 'step_conversion')
+          .where('action_type', whereIn: [
+            'step_conversion',
+            'step_conversion_2x',
+            'carryover_conversion',
+          ])
           .get();
-      
-      for (final doc in conversions2.docs) {
-        final data = doc.data();
-        final timestamp = data['created_at'] ?? data['timestamp'] ?? data['date'];
-        if (timestamp != null && timestamp is Timestamp) {
-          final activityDate = timestamp.toDate();
-          if (activityDate.isAfter(dayStart.subtract(const Duration(seconds: 1))) &&
-              activityDate.isBefore(dayEnd)) {
-            conversionCount++;
-          }
-        }
+      for (var doc in conversions2.docs) {
+        allConversionDocs[doc.id] = doc;
       }
     } catch (e) {
-      debugPrint('Conversion query error: $e');
+      debugPrint('Conversion query 2 error: $e');
+    }
+    
+    // Birleştirilmiş kayıtları say
+    for (final doc in allConversionDocs.values) {
+      final data = doc.data();
+      final timestamp = data['created_at'] ?? data['timestamp'] ?? data['date'];
+      if (timestamp != null && timestamp is Timestamp) {
+        final activityDate = timestamp.toDate().toLocal(); // UTC -> Local
+        if (activityDate.isAfter(dayStart.subtract(const Duration(seconds: 1))) &&
+            activityDate.isBefore(dayEnd)) {
+          conversionCount++;
+        }
+      }
     }
     
     return {
@@ -2236,47 +2382,52 @@ class AdminService {
       debugPrint('Donation query error: $e');
     }
     
-    // 3. O aydaki dönüştürme sayısını al
+    // 3. O aydaki dönüştürme sayısını al (tüm türler dahil)
+    // Duplicate önleme: her iki sorguyu birleştir
+    final allMonthConversionDocs = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
     try {
       final conversions1 = await _firestore
           .collection('activity_logs')
-          .where('activity_type', isEqualTo: 'step_conversion')
+          .where('activity_type', whereIn: [
+            'step_conversion',
+            'step_conversion_2x',
+            'carryover_conversion',
+          ])
           .get();
-      
-      for (final doc in conversions1.docs) {
-        final data = doc.data();
-        final timestamp = data['created_at'] ?? data['timestamp'] ?? data['date'];
-        if (timestamp != null && timestamp is Timestamp) {
-          final activityDate = timestamp.toDate();
-          if (activityDate.isAfter(monthStart.subtract(const Duration(seconds: 1))) &&
-              activityDate.isBefore(monthEnd.add(const Duration(seconds: 1)))) {
-            conversionCount++;
-          }
-        }
+      for (var doc in conversions1.docs) {
+        allMonthConversionDocs[doc.id] = doc;
       }
     } catch (e) {
-      debugPrint('Conversion query error: $e');
+      debugPrint('Conversion query 1 error: $e');
     }
     
     try {
       final conversions2 = await _firestore
           .collection('activity_logs')
-          .where('action_type', isEqualTo: 'step_conversion')
+          .where('action_type', whereIn: [
+            'step_conversion',
+            'step_conversion_2x',
+            'carryover_conversion',
+          ])
           .get();
-      
-      for (final doc in conversions2.docs) {
-        final data = doc.data();
-        final timestamp = data['created_at'] ?? data['timestamp'] ?? data['date'];
-        if (timestamp != null && timestamp is Timestamp) {
-          final activityDate = timestamp.toDate();
-          if (activityDate.isAfter(monthStart.subtract(const Duration(seconds: 1))) &&
-              activityDate.isBefore(monthEnd.add(const Duration(seconds: 1)))) {
-            conversionCount++;
-          }
-        }
+      for (var doc in conversions2.docs) {
+        allMonthConversionDocs[doc.id] = doc;
       }
     } catch (e) {
-      debugPrint('Conversion query error: $e');
+      debugPrint('Conversion query 2 error: $e');
+    }
+    
+    // Birleştirilmiş kayıtları say
+    for (final doc in allMonthConversionDocs.values) {
+      final data = doc.data();
+      final timestamp = data['created_at'] ?? data['timestamp'] ?? data['date'];
+      if (timestamp != null && timestamp is Timestamp) {
+        final activityDate = timestamp.toDate().toLocal(); // UTC -> Local
+        if (activityDate.isAfter(monthStart.subtract(const Duration(seconds: 1))) &&
+            activityDate.isBefore(monthEnd.add(const Duration(seconds: 1)))) {
+          conversionCount++;
+        }
+      }
     }
     
     return {
@@ -2294,14 +2445,6 @@ class AdminService {
           ? ((convertedSteps / totalSteps) * 100).toStringAsFixed(1)
           : '0',
     };
-  }
-  
-  String _getMonthName(int month) {
-    const monthNames = [
-      'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
-      'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
-    ];
-    return monthNames[month - 1];
   }
 
   // ==================== YENİ DASHBOARD ANALİTİKLERİ ====================
@@ -2336,53 +2479,27 @@ class AdminService {
           // Bonus adımları daily_steps'ten al (bonus_steps_converted alanı)
           final bonusStepsConverted = (data['bonus_steps_converted'] ?? 0) as int;
           bonusConversions += bonusStepsConverted;
+          
+          // Bonus Hope'u da daily_steps'ten hesapla (güvenilir kaynak)
+          bonusHopeEarned += bonusStepsConverted / 100.0; // 2x bonus'un ekstra kısmı
         }
       } catch (e) {
         // Devam et
       }
     }
     
-    // Activity logs'tan bonus Hope miktarını al (her zaman güncel kaynak)
-    final activityLogs = await _firestore
-        .collection('activity_logs')
-        .where('activity_type', whereIn: ['step_conversion', 'step_conversion_2x'])
-        .get();
-    
-    for (var doc in activityLogs.docs) {
-      final data = doc.data();
-      final timestamp = (data['created_at'] ?? data['timestamp']) as Timestamp?;
-      if (timestamp != null) {
-        final logDate = timestamp.toDate();
-        if (logDate.year == targetDate.year && 
-            logDate.month == targetDate.month && 
-            logDate.day == targetDate.day) {
-          final activityType = data['activity_type'] ?? '';
-          final isBonus = data['is_bonus'] == true || activityType == 'step_conversion_2x';
-          
-          if (isBonus) {
-            final steps = (data['steps_converted'] ?? 0) as int;
-            final hope = (data['hope_earned'] ?? 0).toDouble();
-            
-            // Eğer daily_steps'ten bonus alınamadıysa, activity_logs'tan al
-            if (bonusConversions == 0) {
-              bonusConversions += steps;
-            }
-            bonusHopeEarned += hope; // Gerçek bonus Hope miktarı
-          }
-        }
-      }
-    }
+    // NOT: activity_logs yerine daily_steps'e güveniyoruz çünkü
+    // activity_logs tarih filtrelemesi sorunlu olabiliyor
     
     int normalConversions = convertedSteps - bonusConversions;
     if (normalConversions < 0) normalConversions = 0;
     
     // Hope hesaplama
     // Normal: 100 adım = 1 Hope
-    // Bonus (2x): Activity logs'tan alınan gerçek hope_earned değeri
+    // Bonus (2x): 100 adım = 2 Hope (1 normal + 1 bonus)
     final normalHope = normalConversions / 100.0;
-    // Eğer activity logs'tan bonus hope alınamadıysa, manuel hesapla
-    // 2x bonus: 2500 adım = 50 Hope (normal 25, bonus +25)
-    final bonusHope = bonusHopeEarned > 0 ? bonusHopeEarned : (bonusConversions / 100.0) * 2;
+    // bonusHopeEarned zaten daily_steps'ten hesaplandı (ekstra bonus)
+    final bonusHope = bonusHopeEarned;
     
     return DailyStepAnalytics(
       totalDailySteps: totalDailySteps,
@@ -2398,69 +2515,326 @@ class AdminService {
 
   /// Taşınan (Carryover) Adım Analizlerini getir
   Future<CarryoverAnalytics> getCarryoverAnalytics() async {
-    int totalCarryover = 0;
-    int convertedCarryover = 0;
-    int pendingCarryover = 0;
-    int expiredSteps = 0;
-    int usersWithCarryover = 0; // Taşınan adımı olan kullanıcı sayısı
+    int totalCarryover = 0;        // Toplam taşınan adım (önceki günlerden kalan)
+    int convertedCarryover = 0;    // activity_logs'tan carryover dönüşümleri
+    int pendingCarryover = 0;      // Henüz dönüştürülmemiş taşınan adımlar
+    int expiredSteps = 0;          // Ay sonunda silinen
+    int usersWithCarryover = 0;    // Taşınan adımı olan kullanıcı sayısı
+    double hopeFromCarryover = 0;  // Carryover'dan kazanılan Hope
     
     final usersSnapshot = await _firestore.collection('users').get();
+    final today = DateTime.now();
+    final todayKey = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    final monthStart = DateTime(today.year, today.month, 1);
     
+    // 1. Her kullanıcının daily_steps'ından taşınan adımları hesapla
     for (var userDoc in usersSnapshot.docs) {
-      final data = userDoc.data();
+      int userCarryover = 0;
       
-      // Toplam taşınan adım (tarihsel) - users'tan
-      totalCarryover += (data['total_carryover_steps'] ?? 0) as int;
-      
-      // Bekleyen taşınan adım
-      final pending = (data['carryover_pending'] ?? 0) as int;
-      pendingCarryover += pending;
-      
-      // Taşınan adımı olan kullanıcıları say
-      if (pending > 0) {
-        usersWithCarryover++;
+      try {
+        final dailyStepsSnapshot = await _firestore
+            .collection('users')
+            .doc(userDoc.id)
+            .collection('daily_steps')
+            .get();
+        
+        for (var stepDoc in dailyStepsSnapshot.docs) {
+          final docId = stepDoc.id;
+          
+          // Bugün değilse ve bu ay içindeyse → taşınan adım
+          if (docId != todayKey) {
+            try {
+              final parts = docId.split('-');
+              if (parts.length == 3) {
+                final docDate = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+                
+                // Bu ay içinde ve bugünden önce = taşınan adım
+                if (docDate.isAfter(monthStart.subtract(const Duration(days: 1))) && 
+                    docDate.isBefore(today)) {
+                  final data = stepDoc.data();
+                  final dailySteps = (data['daily_steps'] ?? 0) as int;
+                  final convertedSteps = (data['converted_steps'] ?? 0) as int;
+                  
+                  // Dönüştürülmemiş adımlar = taşınan
+                  final unconverted = dailySteps - convertedSteps;
+                  if (unconverted > 0) {
+                    userCarryover += unconverted;
+                  }
+                }
+              }
+            } catch (e) {
+              // Tarih parse hatası
+            }
+          }
+        }
+      } catch (e) {
+        // Subcollection erişim hatası
       }
       
-      // Dönüştürülen taşınan adım - users'tan
-      convertedCarryover += (data['carryover_converted'] ?? 0) as int;
-      
-      // Süresi dolup silinen adımlar (tarihsel toplam)
-      expiredSteps += (data['expired_steps_total'] ?? 0) as int;
+      if (userCarryover > 0) {
+        totalCarryover += userCarryover;
+        usersWithCarryover++;
+      }
     }
     
-    // Activity logs'tan carryover dönüşümlerini de kontrol et
+    // 2. Activity logs'tan carryover dönüşümlerini al
     final carryoverLogs = await _firestore
         .collection('activity_logs')
         .where('activity_type', isEqualTo: 'carryover_conversion')
         .get();
     
-    double hopeFromCarryover = 0;
-    int stepsFromLogs = 0;
-    
     for (var doc in carryoverLogs.docs) {
       final data = doc.data();
       hopeFromCarryover += (data['hope_earned'] ?? 0).toDouble();
-      stepsFromLogs += (data['steps_converted'] ?? 0) as int;
+      convertedCarryover += (data['steps_converted'] ?? 0) as int;
     }
     
-    // Eğer users'taki carryover_converted boşsa, activity_logs'tan al
-    if (convertedCarryover == 0 && stepsFromLogs > 0) {
-      convertedCarryover = stepsFromLogs;
-    }
+    // 3. Bekleyen = Toplam taşınan (henüz dönüştürülmemiş)
+    pendingCarryover = totalCarryover;
     
-    // Toplam carryover = dönüştürülen + bekleyen + silinen (tarihsel)
-    if (totalCarryover == 0) {
-      totalCarryover = convertedCarryover + pendingCarryover + expiredSteps;
+    // 4. monthly_reset_summaries'den silinen adımları al
+    try {
+      final resetLogId = '${today.year}-${today.month.toString().padLeft(2, '0')}';
+      final resetLogDoc = await _firestore
+          .collection('monthly_reset_summaries')
+          .doc(resetLogId)
+          .get();
+      
+      if (resetLogDoc.exists) {
+        expiredSteps = (resetLogDoc.data()?['total_carryover_expired'] ?? 0) as int;
+      }
+    } catch (e) {
+      // Reset log yok
     }
     
     return CarryoverAnalytics(
-      totalCarryoverSteps: totalCarryover,
+      totalCarryoverSteps: pendingCarryover + convertedCarryover, // Toplam = bekleyen + dönüştürülen (tarihsel)
       convertedCarryoverSteps: convertedCarryover,
       pendingCarryoverSteps: pendingCarryover,
       hopeFromCarryover: hopeFromCarryover,
       expiredSteps: expiredSteps,
-      lastResetDate: DateTime(DateTime.now().year, DateTime.now().month, 1),
+      lastResetDate: monthStart,
       usersWithCarryover: usersWithCarryover,
+    );
+  }
+
+  /// Günlük Adım Analizlerini tarih aralığı ile getir
+  Future<DailyStepAnalytics> getDailyStepAnalyticsForRange({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    int totalDailySteps = 0;
+    int convertedSteps = 0;
+    int bonusConversions = 0;
+    double bonusHopeEarned = 0;
+    
+    final usersSnapshot = await _firestore.collection('users').get();
+    
+    // Tarih aralığındaki günleri oluştur
+    final List<String> dateKeys = [];
+    DateTime current = DateTime(startDate.year, startDate.month, startDate.day);
+    final endDay = DateTime(endDate.year, endDate.month, endDate.day);
+    
+    while (!current.isAfter(endDay)) {
+      dateKeys.add('${current.year}-${current.month.toString().padLeft(2, '0')}-${current.day.toString().padLeft(2, '0')}');
+      current = current.add(const Duration(days: 1));
+    }
+    
+    debugPrint('📊 Tarih aralığı: ${dateKeys.first} - ${dateKeys.last} (${dateKeys.length} gün)');
+    
+    for (var userDoc in usersSnapshot.docs) {
+      try {
+        final dailyStepsSnapshot = await _firestore
+            .collection('users')
+            .doc(userDoc.id)
+            .collection('daily_steps')
+            .get();
+        
+        for (var stepDoc in dailyStepsSnapshot.docs) {
+          final docId = stepDoc.id;
+          
+          // Bu tarih aralığında mı?
+          if (dateKeys.contains(docId)) {
+            final data = stepDoc.data();
+            totalDailySteps += (data['daily_steps'] ?? 0) as int;
+            convertedSteps += (data['converted_steps'] ?? 0) as int;
+            bonusConversions += (data['bonus_steps_converted'] ?? 0) as int;
+            
+            // Bonus Hope'u da daily_steps'ten hesapla (2x = ekstra 1x)
+            final bonusStepsConverted = (data['bonus_steps_converted'] ?? 0) as int;
+            bonusHopeEarned += bonusStepsConverted / 100.0; // 2x bonus'un ekstra kısmı
+          }
+        }
+      } catch (e) {
+        // Devam et
+      }
+    }
+    
+    int normalConversions = convertedSteps - bonusConversions;
+    if (normalConversions < 0) normalConversions = 0;
+    
+    // Hope hesaplama - daily_steps'ten (güvenilir kaynak)
+    final normalHope = normalConversions / 100.0;
+    // bonusHopeEarned zaten yukarıda daily_steps'ten hesaplandı
+    
+    debugPrint('📊 Sonuç: $totalDailySteps adım, $convertedSteps dönüştürülen, $bonusConversions bonus, ${normalHope + bonusHopeEarned} Hope');
+    
+    return DailyStepAnalytics(
+      totalDailySteps: totalDailySteps,
+      convertedSteps: convertedSteps,
+      normalConvertedSteps: normalConversions,
+      bonusConvertedSteps: bonusConversions,
+      normalHopeEarned: normalHope,
+      bonusHopeEarned: bonusHopeEarned,
+      totalHopeEarned: normalHope + bonusHopeEarned,
+      date: startDate,
+    );
+  }
+
+  /// Taşınan Adım Analizlerini tarih aralığı ile getir
+  Future<CarryoverAnalytics> getCarryoverAnalyticsForRange({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    int totalCarryover = 0;
+    int convertedCarryover = 0;
+    int pendingCarryover = 0;
+    int usersWithCarryover = 0;
+    double hopeFromCarryover = 0;
+    
+    final usersSnapshot = await _firestore.collection('users').get();
+    
+    for (var userDoc in usersSnapshot.docs) {
+      int userCarryover = 0;
+      
+      try {
+        final dailyStepsSnapshot = await _firestore
+            .collection('users')
+            .doc(userDoc.id)
+            .collection('daily_steps')
+            .get();
+        
+        for (var stepDoc in dailyStepsSnapshot.docs) {
+          try {
+            final docId = stepDoc.id;
+            final parts = docId.split('-');
+            if (parts.length == 3) {
+              final docDate = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+              
+              if (docDate.isAfter(startDate.subtract(const Duration(days: 1))) && 
+                  docDate.isBefore(endDate.add(const Duration(days: 1)))) {
+                final data = stepDoc.data();
+                final dailySteps = (data['daily_steps'] ?? 0) as int;
+                final converted = (data['converted_steps'] ?? 0) as int;
+                
+                final unconverted = dailySteps - converted;
+                if (unconverted > 0) {
+                  userCarryover += unconverted;
+                }
+              }
+            }
+          } catch (e) {
+            // Parse hatası
+          }
+        }
+      } catch (e) {
+        // Devam et
+      }
+      
+      if (userCarryover > 0) {
+        totalCarryover += userCarryover;
+        usersWithCarryover++;
+      }
+    }
+    
+    // Activity logs'tan carryover dönüşümlerini al
+    final carryoverLogs = await _firestore
+        .collection('activity_logs')
+        .where('activity_type', isEqualTo: 'carryover_conversion')
+        .get();
+    
+    for (var doc in carryoverLogs.docs) {
+      final data = doc.data();
+      final timestamp = (data['created_at'] ?? data['timestamp']) as Timestamp?;
+      if (timestamp != null) {
+        final logDate = timestamp.toDate();
+        if (logDate.isAfter(startDate.subtract(const Duration(days: 1))) && 
+            logDate.isBefore(endDate.add(const Duration(days: 1)))) {
+          hopeFromCarryover += (data['hope_earned'] ?? 0).toDouble();
+          convertedCarryover += (data['steps_converted'] ?? 0) as int;
+        }
+      }
+    }
+    
+    pendingCarryover = totalCarryover;
+    
+    return CarryoverAnalytics(
+      totalCarryoverSteps: pendingCarryover + convertedCarryover,
+      convertedCarryoverSteps: convertedCarryover,
+      pendingCarryoverSteps: pendingCarryover,
+      hopeFromCarryover: hopeFromCarryover,
+      expiredSteps: 0,
+      lastResetDate: startDate,
+      usersWithCarryover: usersWithCarryover,
+    );
+  }
+
+  /// Referans Analizlerini tarih aralığı ile getir
+  Future<ReferralAnalytics> getReferralAnalyticsForRange({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    int totalReferralUsers = 0;
+    int totalBonusGiven = 0;
+    int convertedBonus = 0;
+    Map<String, int> topReferrers = {};
+    
+    // Activity logs'tan referral aktivitelerini al
+    final activityLogs = await _firestore
+        .collection('activity_logs')
+        .where('activity_type', isEqualTo: 'referral_bonus')
+        .get();
+    
+    for (var doc in activityLogs.docs) {
+      final data = doc.data();
+      final timestamp = (data['created_at'] ?? data['timestamp']) as Timestamp?;
+      if (timestamp != null) {
+        final logDate = timestamp.toDate();
+        if (logDate.isAfter(startDate.subtract(const Duration(days: 1))) && 
+            logDate.isBefore(endDate.add(const Duration(days: 1)))) {
+          totalReferralUsers++;
+          totalBonusGiven += (data['bonus_steps'] ?? 100000) as int;
+        }
+      }
+    }
+    
+    // Bonus dönüşümlerini al
+    final bonusLogs = await _firestore
+        .collection('activity_logs')
+        .where('activity_type', isEqualTo: 'bonus_conversion')
+        .get();
+    
+    for (var doc in bonusLogs.docs) {
+      final data = doc.data();
+      final timestamp = (data['created_at'] ?? data['timestamp']) as Timestamp?;
+      if (timestamp != null) {
+        final logDate = timestamp.toDate();
+        if (logDate.isAfter(startDate.subtract(const Duration(days: 1))) && 
+            logDate.isBefore(endDate.add(const Duration(days: 1)))) {
+          convertedBonus += (data['steps_converted'] ?? 0) as int;
+        }
+      }
+    }
+    
+    final hopeFromBonus = convertedBonus / 100.0;
+    
+    return ReferralAnalytics(
+      totalReferralUsers: totalReferralUsers,
+      totalBonusStepsGiven: totalBonusGiven,
+      convertedBonusSteps: convertedBonus,
+      pendingBonusSteps: totalBonusGiven - convertedBonus,
+      hopeFromBonusSteps: hopeFromBonus,
+      topReferrers: topReferrers,
     );
   }
 
@@ -2722,12 +3096,17 @@ class AdminService {
           final referrerDoc = await _firestore.collection('users').doc(referredBy).get();
           final referrerName = referrerDoc.data()?['full_name'] ?? 'Kullanıcı';
           
+          // Gerçek bonus değerini oku, yoksa varsayılan 100K
+          final bonusGiven = (data['referral_bonus_received'] ?? 
+                              data['bonus_steps_from_referral'] ?? 
+                              100000) as int;
+          
           records.add(ReferralRecord(
             referrerId: referredBy,
             referrerUsername: referrerName,
             referredId: userDoc.id,
             referredUsername: data['full_name'] ?? 'Kullanıcı',
-            bonusStepsGiven: 100000, // Her davet 100K bonus
+            bonusStepsGiven: bonusGiven,
             bonusStepsUsed: (data['referral_bonus_converted'] ?? 0) as int,
             referralDate: (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
           ));
@@ -2740,5 +3119,649 @@ class AdminService {
     // Tarihe göre sırala
     records.sort((a, b) => b.referralDate.compareTo(a.referralDate));
     return records.take(limit).toList();
+  }
+
+  /// Detaylı taşınan (carryover) adım kayıtlarını getir
+  /// Bu metod sadece önceki günlerin dönüştürülmemiş adımlarını getirir
+  Future<List<UserStepRecord>> getDetailedCarryoverRecords({
+    DateTime? startDate,
+    DateTime? endDate,
+    int limit = 100,
+  }) async {
+    List<UserStepRecord> records = [];
+    final today = DateTime.now();
+    final todayKey = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    final monthStart = DateTime(today.year, today.month, 1);
+    
+    final start = startDate ?? monthStart;
+    final end = endDate ?? today.subtract(const Duration(days: 1)); // Bugün hariç
+    
+    final usersSnapshot = await _firestore.collection('users').get();
+    
+    for (var userDoc in usersSnapshot.docs) {
+      final userName = userDoc.data()['full_name'] ?? 'Kullanıcı';
+      
+      try {
+        final stepsSnapshot = await _firestore
+            .collection('users')
+            .doc(userDoc.id)
+            .collection('daily_steps')
+            .get();
+        
+        for (var stepDoc in stepsSnapshot.docs) {
+          // Bugünü atla - bugünün adımları carryover değil
+          if (stepDoc.id == todayKey) continue;
+          
+          // Tarih parse et
+          final parts = stepDoc.id.split('-');
+          if (parts.length == 3) {
+            final date = DateTime(
+              int.parse(parts[0]),
+              int.parse(parts[1]),
+              int.parse(parts[2]),
+            );
+            
+            // Sadece bu ay içindeki önceki günler (carryover)
+            if (date.isAfter(start.subtract(const Duration(days: 1))) &&
+                date.isBefore(end.add(const Duration(days: 1)))) {
+              final data = stepDoc.data();
+              final dailySteps = (data['daily_steps'] ?? 0) as int;
+              final converted = (data['converted_steps'] ?? 0) as int;
+              
+              // Sadece bekleyen (dönüştürülmemiş) adımları olan kayıtları göster
+              final pendingSteps = dailySteps - converted;
+              if (pendingSteps > 0) {
+                records.add(UserStepRecord(
+                  userId: userDoc.id,
+                  username: userName,
+                  steps: pendingSteps, // Sadece bekleyen adımlar
+                  convertedSteps: 0,   // Carryover için converted=0
+                  hopeEarned: 0,       // Henüz dönüştürülmedi
+                  hasBonusMultiplier: false,
+                  date: date,
+                ));
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Devam et
+      }
+    }
+    
+    // Tarihe göre sırala (en yeniden)
+    records.sort((a, b) => b.date.compareTo(a.date));
+    return records.take(limit).toList();
+  }
+
+  // ==================== SİSTEM ÖZETİ ANALİTİKLERİ ====================
+
+  /// Sistem özeti için ana istatistikleri getir (kümülatif)
+  Future<SystemSummaryStats> getSystemSummaryStats() async {
+    double producedHope = 0;
+    double donatedHope = 0;
+    double remainingHope = 0;
+    double totalAdRevenue = 0;
+
+    try {
+      final usersSnapshot = await _firestore.collection('users').get();
+      
+      for (var userDoc in usersSnapshot.docs) {
+        final data = userDoc.data();
+        // Cüzdanlardaki Hope
+        final walletHope = data['wallet_balance_hope'] ?? 0;
+        remainingHope += (walletHope is int) ? walletHope.toDouble() : (walletHope as num).toDouble();
+        
+        // Toplam bağışlanan Hope
+        final donated = data['lifetime_donated_hope'] ?? 0;
+        donatedHope += (donated is int) ? donated.toDouble() : (donated as num).toDouble();
+      }
+
+      // Üretilen = Kalan + Bağışlanan
+      producedHope = remainingHope + donatedHope;
+
+      // Reklam geliri (ad_revenue collection'dan)
+      try {
+        final adRevenueDoc = await _firestore.collection('app_stats').doc('ad_revenue').get();
+        if (adRevenueDoc.exists) {
+          totalAdRevenue = (adRevenueDoc.data()?['total_revenue'] ?? 0).toDouble();
+        }
+      } catch (e) {
+        debugPrint('Reklam geliri okuma hatası: $e');
+      }
+
+    } catch (e) {
+      debugPrint('Sistem özeti hatası: $e');
+    }
+
+    return SystemSummaryStats(
+      producedHope: producedHope,
+      donatedHope: donatedHope,
+      remainingHope: remainingHope,
+      totalAdRevenue: totalAdRevenue,
+    );
+  }
+
+  /// Üretilen Hope analitiği (kaynak bazlı breakdown)
+  Future<ProducedHopeAnalytics> getProducedHopeAnalytics({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    double hopeFromDailySteps = 0;
+    double hopeFromCarryover = 0;
+    double hopeFrom2xBonus = 0;
+    double hopeFromReferralBonus = 0;
+    double hopeFromTeamBonus = 0;
+
+    try {
+      // Tarih filtreleme
+      final bool hasDateFilter = startDate != null && endDate != null;
+      
+      if (hasDateFilter) {
+        // Tarih aralığı için activity_logs'tan çek
+        final activityLogs = await _firestore.collection('activity_logs').get();
+        
+        for (var doc in activityLogs.docs) {
+          final data = doc.data();
+          final timestamp = (data['created_at'] ?? data['timestamp']) as Timestamp?;
+          if (timestamp == null) continue;
+          
+          final logDate = timestamp.toDate();
+          if (logDate.isBefore(startDate!) || logDate.isAfter(endDate!.add(const Duration(days: 1)))) {
+            continue;
+          }
+          
+          final activityType = data['activity_type'] ?? data['action_type'] ?? '';
+          final hopeEarned = ((data['hope_earned'] ?? data['amount'] ?? 0) as num).toDouble();
+          final stepsConverted = (data['steps_converted'] ?? 0) as int;
+          
+          switch (activityType) {
+            case 'step_conversion':
+              hopeFromDailySteps += hopeEarned;
+              break;
+            case 'step_conversion_2x':
+              // 2x bonus = toplam - normal kısım
+              final normalPart = stepsConverted / 100.0;
+              hopeFrom2xBonus += (hopeEarned - normalPart).clamp(0, double.infinity);
+              hopeFromDailySteps += normalPart;
+              break;
+            case 'carryover_conversion':
+              hopeFromCarryover += hopeEarned;
+              break;
+            case 'bonus_conversion':
+            case 'referral_bonus_conversion':
+              hopeFromReferralBonus += hopeEarned;
+              break;
+            case 'team_bonus_conversion':
+              hopeFromTeamBonus += hopeEarned;
+              break;
+          }
+        }
+      } else {
+        // Kümülatif: users koleksiyonundan çek (SystemSummaryStats ile tutarlı)
+        final usersSnapshot = await _firestore.collection('users').get();
+        
+        // Önce toplam üretilen Hope'u hesapla (cüzdan + bağışlanan) - BU TOPLAM MUTLAKA DOĞRU
+        double totalProduced = 0;
+        for (var userDoc in usersSnapshot.docs) {
+          final data = userDoc.data();
+          // Cüzdandaki Hope
+          final wallet = ((data['wallet_balance_hope'] ?? 0) as num).toDouble();
+          // Bağışlanan Hope
+          final donated = ((data['lifetime_donated_hope'] ?? 0) as num).toDouble();
+          totalProduced += wallet + donated;
+          
+          // Referans bonus dönüştürülen
+          final referralConverted = (data['referral_bonus_converted'] ?? 0) as int;
+          hopeFromReferralBonus += referralConverted / 100.0;
+        }
+
+        // Takım bonus'larını teams koleksiyonundan çek
+        final teamsSnapshot = await _firestore.collection('teams').get();
+        for (var teamDoc in teamsSnapshot.docs) {
+          final data = teamDoc.data();
+          final teamBonusConverted = (data['team_bonus_converted'] ?? 0) as int;
+          hopeFromTeamBonus += teamBonusConverted / 100.0;
+        }
+
+        // Activity logs'tan 2x bonus ve carryover'ı çek
+        final activityLogs = await _firestore
+            .collection('activity_logs')
+            .where('activity_type', whereIn: ['step_conversion_2x', 'carryover_conversion'])
+            .get();
+        
+        for (var doc in activityLogs.docs) {
+          final data = doc.data();
+          final activityType = data['activity_type'] ?? '';
+          final hopeEarned = ((data['hope_earned'] ?? data['amount'] ?? 0) as num).toDouble();
+          final stepsConverted = (data['steps_converted'] ?? 0) as int;
+          
+          if (activityType == 'step_conversion_2x') {
+            final normalPart = stepsConverted / 100.0;
+            hopeFrom2xBonus += (hopeEarned - normalPart).clamp(0, double.infinity);
+          } else if (activityType == 'carryover_conversion') {
+            hopeFromCarryover += hopeEarned;
+          }
+        }
+        
+        // Günlük adım Hope'u = Toplam - Diğer kaynaklar
+        hopeFromDailySteps = totalProduced - hopeFrom2xBonus - hopeFromCarryover - hopeFromReferralBonus - hopeFromTeamBonus;
+        if (hopeFromDailySteps < 0) hopeFromDailySteps = 0;
+        
+        // TOPLAM her zaman wallet + donated olmalı (kaynak dağılımı yaklaşık olabilir)
+        // Return'de totalProduced kullan, hesaplanan toplam değil
+        return ProducedHopeAnalytics(
+          totalProducedHope: totalProduced, // BU MUTLAKA DOĞRU TOPLAM
+          hopeFromDailySteps: hopeFromDailySteps,
+          hopeFromCarryover: hopeFromCarryover,
+          hopeFrom2xBonus: hopeFrom2xBonus,
+          hopeFromReferralBonus: hopeFromReferralBonus,
+          hopeFromTeamBonus: hopeFromTeamBonus,
+        );
+      }
+    } catch (e) {
+      debugPrint('Üretilen Hope analizi hatası: $e');
+    }
+
+    // Bu sadece tarih filtreli durum için çalışır (if bloğu)
+    final totalProduced = hopeFromDailySteps + hopeFromCarryover + hopeFrom2xBonus + hopeFromReferralBonus + hopeFromTeamBonus;
+
+    return ProducedHopeAnalytics(
+      totalProducedHope: totalProduced,
+      hopeFromDailySteps: hopeFromDailySteps,
+      hopeFromCarryover: hopeFromCarryover,
+      hopeFrom2xBonus: hopeFrom2xBonus,
+      hopeFromReferralBonus: hopeFromReferralBonus,
+      hopeFromTeamBonus: hopeFromTeamBonus,
+    );
+  }
+
+  /// Bağışlanan Hope analitiği (kurum bazlı breakdown)
+  Future<DonatedHopeAnalytics> getDonatedHopeAnalytics({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    double totalDonated = 0;
+    int totalCount = 0;
+    Map<String, CharityDonationBreakdown> charityBreakdown = {};
+
+    try {
+      // Önce tüm charity'leri çek
+      final charitiesSnapshot = await _firestore.collection('charities').get();
+      Map<String, Map<String, dynamic>> charityInfo = {};
+      for (var doc in charitiesSnapshot.docs) {
+        final data = doc.data();
+        charityInfo[doc.id] = {
+          'name': data['name'] ?? 'Bilinmeyen',
+          'logo_url': data['logo_url'] ?? data['logoUrl'],
+        };
+      }
+
+      final bool hasDateFilter = startDate != null && endDate != null;
+
+      if (hasDateFilter) {
+        // Tarih aralığı için activity_logs koleksiyonundan çek (donation type)
+        final activitySnapshot = await _firestore.collection('activity_logs')
+            .where('activity_type', isEqualTo: 'donation')
+            .get();
+        
+        for (var doc in activitySnapshot.docs) {
+          final data = doc.data();
+          
+          final timestamp = (data['timestamp'] ?? data['created_at'] ?? data['date']) as Timestamp?;
+          if (timestamp != null) {
+            final donationDate = timestamp.toDate();
+            if (donationDate.isBefore(startDate) || donationDate.isAfter(endDate.add(const Duration(days: 1)))) {
+              continue;
+            }
+          }
+          
+          final charityId = data['charity_id'] ?? data['charityId'] ?? '';
+          final hopeAmount = ((data['amount'] ?? data['hope_amount'] ?? 0) as num).toDouble();
+          
+          totalDonated += hopeAmount;
+          totalCount++;
+          
+          // Kurum bazlı toplama
+          if (charityId.isNotEmpty) {
+            if (charityBreakdown.containsKey(charityId)) {
+              final existing = charityBreakdown[charityId]!;
+              charityBreakdown[charityId] = CharityDonationBreakdown(
+                charityId: charityId,
+                charityName: existing.charityName,
+                charityLogoUrl: existing.charityLogoUrl,
+                totalHope: existing.totalHope + hopeAmount,
+                donationCount: existing.donationCount + 1,
+              );
+            } else {
+              final info = charityInfo[charityId];
+              charityBreakdown[charityId] = CharityDonationBreakdown(
+                charityId: charityId,
+                charityName: info?['name'] ?? 'Bilinmeyen Kurum',
+                charityLogoUrl: info?['logo_url'],
+                totalHope: hopeAmount,
+                donationCount: 1,
+              );
+            }
+          }
+        }
+      } else {
+        // Kümülatif: users koleksiyonundan lifetime_donated_hope çek (getSystemSummaryStats ile tutarlı)
+        final usersSnapshot = await _firestore.collection('users').get();
+        
+        for (var userDoc in usersSnapshot.docs) {
+          final data = userDoc.data();
+          final donated = ((data['lifetime_donated_hope'] ?? 0) as num).toDouble();
+          if (donated > 0) {
+            totalDonated += donated;
+            totalCount++; // Bağış yapan kullanıcı sayısı
+          }
+        }
+        
+        // Charity breakdown için activity_logs'tan çek (varsa)
+        // Önce activity_type ile
+        final activitySnapshot1 = await _firestore.collection('activity_logs')
+            .where('activity_type', isEqualTo: 'donation')
+            .get();
+        
+        // Sonra action_type ile (eski kayıtlar için)
+        final activitySnapshot2 = await _firestore.collection('activity_logs')
+            .where('action_type', isEqualTo: 'donation')
+            .get();
+        
+        final processedIds = <String>{};
+        
+        // Her iki sonucu birleştir
+        final allDonations = [...activitySnapshot1.docs, ...activitySnapshot2.docs];
+        
+        for (var doc in allDonations) {
+          if (processedIds.contains(doc.id)) continue;
+          processedIds.add(doc.id);
+          
+          final data = doc.data();
+          final charityId = data['charity_id'] ?? data['charityId'] ?? '';
+          final hopeAmount = ((data['amount'] ?? data['hope_amount'] ?? 0) as num).toDouble();
+          
+          if (charityId.isNotEmpty) {
+            if (charityBreakdown.containsKey(charityId)) {
+              final existing = charityBreakdown[charityId]!;
+              charityBreakdown[charityId] = CharityDonationBreakdown(
+                charityId: charityId,
+                charityName: existing.charityName,
+                charityLogoUrl: existing.charityLogoUrl,
+                totalHope: existing.totalHope + hopeAmount,
+                donationCount: existing.donationCount + 1,
+              );
+            } else {
+              final info = charityInfo[charityId];
+              charityBreakdown[charityId] = CharityDonationBreakdown(
+                charityId: charityId,
+                charityName: info?['name'] ?? 'Bilinmeyen Kurum',
+                charityLogoUrl: info?['logo_url'],
+                totalHope: hopeAmount,
+                donationCount: 1,
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Bağışlanan Hope analizi hatası: $e');
+    }
+
+    return DonatedHopeAnalytics(
+      totalDonatedHope: totalDonated,
+      totalDonationCount: totalCount,
+      charityBreakdown: charityBreakdown,
+    );
+  }
+
+  /// Reklam geliri analitiği (reklam türü bazlı breakdown)
+  /// Reklam geliri analitiği (reklam türü bazlı breakdown)
+  /// eCPM değerleri (USD cinsinden, Türkiye için yaklaşık):
+  /// - Interstitial: $2-5 (ortalama $3)
+  /// - Rewarded: $5-15 (ortalama $8)
+  /// - Banner: $0.5-2 (ortalama $1)
+  Future<AdRevenueAnalytics> getAdRevenueAnalytics({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    double totalRevenue = 0;
+    double interstitialRevenue = 0;
+    double bannerRevenue = 0;
+    double rewardedRevenue = 0;
+    int totalImpressions = 0;
+    int interstitialImpressions = 0;
+    int bannerImpressions = 0;
+    int rewardedImpressions = 0;
+
+    // eCPM değerleri (1000 gösterim başına USD)
+    const double interstitialEcpm = 3.0;
+    const double rewardedEcpm = 8.0;
+    const double bannerEcpm = 1.0;
+
+    try {
+      // ad_logs koleksiyonundan çek (AdLogService tarafından kaydedilen)
+      final adLogsSnapshot = await _firestore.collection('ad_logs').get();
+      
+      for (var doc in adLogsSnapshot.docs) {
+        final data = doc.data();
+        
+        // Tarih filtresi
+        if (startDate != null && endDate != null) {
+          final timestamp = (data['timestamp'] ?? data['created_at']) as Timestamp?;
+          if (timestamp != null) {
+            final adDate = timestamp.toDate();
+            if (adDate.isBefore(startDate) || adDate.isAfter(endDate.add(const Duration(days: 1)))) {
+              continue;
+            }
+          }
+        }
+        
+        final adType = data['ad_type'] ?? '';
+        final wasShown = data['was_shown'] ?? data['was_completed'] ?? false;
+        
+        // Sadece başarılı gösterimleri say
+        if (!wasShown) continue;
+        
+        totalImpressions++;
+        
+        switch (adType.toLowerCase()) {
+          case 'interstitial':
+            interstitialImpressions++;
+            // eCPM bazlı tahmini gelir: impressions * eCPM / 1000
+            interstitialRevenue = interstitialImpressions * interstitialEcpm / 1000;
+            break;
+          case 'banner':
+            bannerImpressions++;
+            bannerRevenue = bannerImpressions * bannerEcpm / 1000;
+            break;
+          case 'rewarded':
+            rewardedImpressions++;
+            rewardedRevenue = rewardedImpressions * rewardedEcpm / 1000;
+            break;
+        }
+      }
+      
+      // Toplam tahmini geliri hesapla
+      totalRevenue = interstitialRevenue + bannerRevenue + rewardedRevenue;
+
+      // Eğer ad_logs boşsa, app_stats'tan toplam değeri çek (manuel girilen değerler)
+      if (totalImpressions == 0) {
+        try {
+          final adStatsDoc = await _firestore.collection('app_stats').doc('ad_revenue').get();
+          if (adStatsDoc.exists) {
+            final data = adStatsDoc.data()!;
+            totalRevenue = ((data['total_revenue'] ?? 0) as num).toDouble();
+            interstitialRevenue = ((data['interstitial_revenue'] ?? 0) as num).toDouble();
+            bannerRevenue = ((data['banner_revenue'] ?? 0) as num).toDouble();
+            rewardedRevenue = ((data['rewarded_revenue'] ?? 0) as num).toDouble();
+            totalImpressions = (data['total_impressions'] ?? 0) as int;
+            interstitialImpressions = (data['interstitial_impressions'] ?? 0) as int;
+            bannerImpressions = (data['banner_impressions'] ?? 0) as int;
+            rewardedImpressions = (data['rewarded_impressions'] ?? 0) as int;
+          }
+        } catch (e) {
+          debugPrint('App stats okuma hatası: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('Reklam geliri analizi hatası: $e');
+    }
+
+    return AdRevenueAnalytics(
+      totalRevenue: totalRevenue,
+      interstitialRevenue: interstitialRevenue,
+      bannerRevenue: bannerRevenue,
+      rewardedRevenue: rewardedRevenue,
+      totalAdImpressions: totalImpressions,
+      interstitialImpressions: interstitialImpressions,
+      bannerImpressions: bannerImpressions,
+      rewardedImpressions: rewardedImpressions,
+    );
+  }
+
+  /// AdMob'dan güncel gelir verilerini çek (Cloud Function'ı tetikler)
+  Future<Map<String, dynamic>> refreshAdRevenueData() async {
+    try {
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('fetchAdMobRevenueManual');
+      final result = await callable.call();
+      
+      if (result.data != null && result.data['success'] == true) {
+        return {
+          'success': true,
+          'message': result.data['message'] ?? 'Reklam geliri güncellendi',
+          'data': result.data['data'],
+        };
+      }
+      
+      return {
+        'success': false,
+        'message': 'Veri alınamadı',
+      };
+    } catch (e) {
+      debugPrint('AdMob refresh hatası: $e');
+      return {
+        'success': false,
+        'message': 'Hata: $e',
+      };
+    }
+  }
+
+  // ==================== AYLIK HOPE DEĞERİ SİSTEMİ ====================
+
+  /// Firebase'den gelen verileri güvenli şekilde Map<String, dynamic>'e dönüştür
+  Map<String, dynamic> _convertFirebaseMap(dynamic data) {
+    if (data == null) return {};
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) {
+      return data.map((key, value) {
+        final stringKey = key?.toString() ?? '';
+        if (value is Map) {
+          return MapEntry(stringKey, _convertFirebaseMap(value));
+        } else if (value is List) {
+          return MapEntry(stringKey, value.map((e) => e is Map ? _convertFirebaseMap(e) : e).toList());
+        }
+        return MapEntry(stringKey, value);
+      });
+    }
+    return {};
+  }
+
+  /// Aylık Hope değeri özetini getir (son 12 ay)
+  Future<Map<String, dynamic>> getMonthlyHopeSummary() async {
+    try {
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('getMonthlyHopeSummary');
+      final result = await callable.call();
+      
+      if (result.data != null && result.data['success'] == true) {
+        // Firebase'den gelen verileri güvenli şekilde dönüştür
+        final rawData = result.data['data'];
+        List<Map<String, dynamic>> convertedData = [];
+        
+        if (rawData is List) {
+          for (var item in rawData) {
+            convertedData.add(_convertFirebaseMap(item));
+          }
+        }
+        
+        return {
+          'success': true,
+          'data': convertedData,
+        };
+      }
+      
+      return {
+        'success': false,
+        'message': 'Veri alınamadı',
+      };
+    } catch (e) {
+      debugPrint('Monthly Hope Summary hatası: $e');
+      return {
+        'success': false,
+        'message': 'Hata: $e',
+      };
+    }
+  }
+
+  /// Belirli bir ay için manuel Hope değeri hesapla
+  Future<Map<String, dynamic>> calculateMonthlyHopeValue(String monthKey) async {
+    try {
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('calculateMonthlyHopeValueManual');
+      final result = await callable.call({'monthKey': monthKey});
+      
+      if (result.data != null && result.data['success'] == true) {
+        return {
+          'success': true,
+          'message': result.data['message'] ?? 'Hesaplama tamamlandı',
+          'data': _convertFirebaseMap(result.data['data']),
+        };
+      }
+      
+      return {
+        'success': false,
+        'message': 'Hesaplama yapılamadı',
+      };
+    } catch (e) {
+      debugPrint('Calculate Monthly Hope Value hatası: $e');
+      return {
+        'success': false,
+        'message': 'Hata: $e',
+      };
+    }
+  }
+
+  /// Bekleyen bağışları onayla (derneğe aktarım için)
+  Future<Map<String, dynamic>> approvePendingDonations(String monthKey, {String? charityId}) async {
+    try {
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('approvePendingDonations');
+      final result = await callable.call({
+        'monthKey': monthKey,
+        if (charityId != null) 'charityId': charityId,
+      });
+      
+      if (result.data != null && result.data['success'] == true) {
+        return {
+          'success': true,
+          'message': result.data['message'] ?? 'Bağışlar onaylandı',
+          'data': result.data['data'],
+        };
+      }
+      
+      return {
+        'success': false,
+        'message': result.data?['message'] ?? 'Onay yapılamadı',
+      };
+    } catch (e) {
+      debugPrint('Approve Pending Donations hatası: $e');
+      return {
+        'success': false,
+        'message': 'Hata: $e',
+      };
+    }
   }
 }

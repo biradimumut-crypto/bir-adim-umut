@@ -1,4 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../services/admin_service.dart';
 import '../../models/admin_badge_model.dart';
 
@@ -12,6 +16,7 @@ class AdminBadgesScreen extends StatefulWidget {
 
 class _AdminBadgesScreenState extends State<AdminBadgesScreen> {
   final AdminService _adminService = AdminService();
+  final ImagePicker _imagePicker = ImagePicker();
   
   List<AdminBadgeModel> _badges = [];
   bool _isLoading = true;
@@ -159,10 +164,11 @@ class _AdminBadgesScreenState extends State<AdminBadgesScreen> {
                     children: [
                       Text(badge.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 1),
                       const SizedBox(height: 2),
-                      Row(
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
                         children: [
                           _buildLevelBadge(badge.level),
-                          const SizedBox(width: 4),
                           _buildStatusBadge(badge.isActive),
                         ],
                       ),
@@ -342,6 +348,8 @@ class _AdminBadgesScreenState extends State<AdminBadgesScreen> {
     BadgeCriteriaType selectedCriteria = badge?.criteriaType ?? BadgeCriteriaType.steps;
     BadgeLevel selectedLevel = badge?.level ?? BadgeLevel.bronze;
     bool isActive = badge?.isActive ?? true;
+    bool isUploading = false;
+    XFile? selectedImage;
     
     showDialog(
       context: context,
@@ -350,6 +358,59 @@ class _AdminBadgesScreenState extends State<AdminBadgesScreen> {
           final screenWidth = MediaQuery.of(context).size.width;
           final dialogWidth = screenWidth > 600 ? 500.0 : screenWidth * 0.9;
           final isMobile = screenWidth < 500;
+          
+          // Görsel yükleme fonksiyonu
+          Future<void> pickAndUploadImage() async {
+            try {
+              final XFile? image = await _imagePicker.pickImage(
+                source: ImageSource.gallery,
+                maxWidth: 512,
+                maxHeight: 512,
+                imageQuality: 85,
+              );
+              
+              if (image != null) {
+                setDialogState(() {
+                  isUploading = true;
+                  selectedImage = image;
+                });
+                
+                // Firebase Storage'a yükle
+                final fileName = 'badge_${DateTime.now().millisecondsSinceEpoch}.${image.path.split('.').last}';
+                final ref = FirebaseStorage.instance.ref().child('badges/$fileName');
+                
+                UploadTask uploadTask;
+                if (kIsWeb) {
+                  final bytes = await image.readAsBytes();
+                  uploadTask = ref.putData(bytes);
+                } else {
+                  uploadTask = ref.putFile(File(image.path));
+                }
+                
+                final snapshot = await uploadTask;
+                final downloadUrl = await snapshot.ref.getDownloadURL();
+                
+                setDialogState(() {
+                  iconController.text = downloadUrl;
+                  isUploading = false;
+                });
+                
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Görsel yüklendi!'), backgroundColor: Colors.green),
+                  );
+                }
+              }
+            } catch (e) {
+              setDialogState(() => isUploading = false);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Yükleme hatası: $e'), backgroundColor: Colors.red),
+                );
+              }
+            }
+          }
+          
           return AlertDialog(
           title: Text(isEdit ? 'Rozet Düzenle' : 'Yeni Rozet Ekle'),
           content: SizedBox(
@@ -375,13 +436,88 @@ class _AdminBadgesScreenState extends State<AdminBadgesScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: iconController,
-                    decoration: const InputDecoration(
-                      labelText: 'İkon URL',
-                      border: OutlineInputBorder(),
+                  
+                  // Görsel Yükleme Bölümü
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Rozet İkonu', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            // Önizleme
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[200],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey[300]!),
+                              ),
+                              child: isUploading
+                                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                                  : iconController.text.isNotEmpty
+                                      ? ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Image.network(
+                                            iconController.text,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
+                                          ),
+                                        )
+                                      : const Icon(Icons.image, color: Colors.grey),
+                            ),
+                            const SizedBox(width: 16),
+                            // Yükleme butonu
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ElevatedButton.icon(
+                                    onPressed: isUploading ? null : pickAndUploadImage,
+                                    icon: const Icon(Icons.upload, size: 18),
+                                    label: Text(isUploading ? 'Yükleniyor...' : 'Görsel Yükle'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.blue,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'veya URL girin:',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: iconController,
+                          decoration: InputDecoration(
+                            labelText: 'İkon URL',
+                            border: const OutlineInputBorder(),
+                            suffixIcon: iconController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18),
+                                    onPressed: () => setDialogState(() => iconController.clear()),
+                                  )
+                                : null,
+                          ),
+                          style: const TextStyle(fontSize: 12),
+                          onChanged: (_) => setDialogState(() {}),
+                        ),
+                      ],
                     ),
                   ),
+                  
                   const SizedBox(height: 16),
                   // Kriter Türü ve Hedef Değer - Mobilde alt alta
                   if (isMobile) ...[

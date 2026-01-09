@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'dart:io';
+import '../services/ad_log_service.dart';
 
 /// Banner Reklam Widget'ı - Google AdMob
 class BannerAdWidget extends StatefulWidget {
@@ -13,6 +14,8 @@ class BannerAdWidget extends StatefulWidget {
 class _BannerAdWidgetState extends State<BannerAdWidget> {
   BannerAd? _bannerAd;
   bool _isLoaded = false;
+  final AdLogService _adLogService = AdLogService();
+  bool _hasLoggedImpression = false; // Tekrar log atmasın
 
   // AdMob Banner Ad Unit ID'leri
   static String get _adUnitId {
@@ -42,10 +45,16 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
             setState(() {
               _isLoaded = true;
             });
+            // ✅ Banner gösterildi logu (sadece bir kez)
+            if (!_hasLoggedImpression) {
+              _hasLoggedImpression = true;
+              _adLogService.logBannerAd(context: 'dashboard', wasShown: true);
+            }
           }
         },
         onAdFailedToLoad: (ad, error) {
           print('BannerAd yüklenemedi: ${error.message}');
+          _adLogService.logAdLoadError(adType: 'banner', errorMessage: error.message);
           ad.dispose();
         },
         onAdOpened: (ad) {

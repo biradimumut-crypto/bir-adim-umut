@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:typed_data';
 import '../../services/auth_service.dart';
-import '../../services/badge_service.dart';
 import '../../services/admin_service.dart';
 import '../../models/user_model.dart';
 import '../auth/login_screen.dart';
@@ -75,66 +74,119 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     }
   }
   
-  /// Kullanıcının sıralama bilgilerini yükle
+  /// Bu ayın başlangıcını al
+  DateTime _getMonthStart() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, 1);
+  }
+  
+  /// Kullanıcının sıralama bilgilerini yükle (Sıralama sayfasıyla aynı mantık - aylık bazda)
   Future<void> _loadUserRankings() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     
     try {
-      // Umut Hareketi sıralaması (adım bazlı) - sadece gerçek adımlar
-      final stepSnapshot = await FirebaseFirestore.instance
-          .collection('activity_logs')
-          .where('activity_type', whereIn: ['step_conversion', 'step_conversion_2x', 'carryover_conversion'])
-          .get();
+      final monthStart = _getMonthStart();
+      final firestore = FirebaseFirestore.instance;
       
-      // Kullanıcı başına toplam adım
-      Map<String, int> stepsByUser = {};
-      for (var doc in stepSnapshot.docs) {
-        final data = doc.data();
-        final odulId = data['user_id'] as String;
-        final steps = (data['steps_converted'] ?? 0) as int;
-        stepsByUser[odulId] = (stepsByUser[odulId] ?? 0) + steps;
+      // ========== ADIM SIRALAMASI (Umut Hareketi) ==========
+      // Sıralama sayfasıyla aynı: Bu ay dönüştürülen adımlar
+      final validActivityTypes = [
+        'step_conversion',
+        'step_conversion_2x',
+        'carryover_conversion',
+      ];
+      
+      final Map<String, int> userSteps = {};
+      
+      for (final activityType in validActivityTypes) {
+        final logsSnapshot = await firestore
+            .collection('activity_logs')
+            .where('activity_type', isEqualTo: activityType)
+            .get();
+        
+        for (var doc in logsSnapshot.docs) {
+          final data = doc.data();
+          
+          // Tarih kontrolü - bu ay mı?
+          DateTime? logDate;
+          if (data['created_at'] != null) {
+            logDate = (data['created_at'] as Timestamp).toDate();
+          } else if (data['timestamp'] != null) {
+            logDate = (data['timestamp'] as Timestamp).toDate();
+          }
+          
+          if (logDate == null || logDate.isBefore(monthStart)) continue;
+          
+          final oduid = data['user_id'] ?? '';
+          final steps = (data['steps_converted'] ?? 0) as int;
+          
+          if (oduid.isNotEmpty && steps > 0) {
+            userSteps[oduid] = (userSteps[oduid] ?? 0) + steps;
+          }
+        }
       }
       
-      // Sırala
-      var sortedSteps = stepsByUser.entries.toList()
+      // Sırala ve kullanıcının sırasını bul
+      final stepsList = userSteps.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
       
-      int stepRank = 0;
-      for (int i = 0; i < sortedSteps.length; i++) {
-        if (sortedSteps[i].key == uid) {
-          stepRank = i + 1;
-          break;
-        }
-      }
+      int stepRank = stepsList.indexWhere((e) => e.key == uid);
+      stepRank = stepRank == -1 ? stepsList.length + 1 : stepRank + 1;
       
-      // Umut Elçileri sıralaması (bağış bazlı)
-      final usersSnapshot = await FirebaseFirestore.instance
-          .collection('users')
+      // ========== BAĞIŞ SIRALAMASI (Umut Elçileri) ==========
+      // Sıralama sayfasıyla aynı: Bu ay yapılan bağışlar
+      final logsSnapshot1 = await firestore
+          .collection('activity_logs')
+          .where('activity_type', isEqualTo: 'donation')
           .get();
       
-      // Manuel sıralama - eşit puanlarda UID'ye göre sırala (tutarlılık için)
-      final usersList = usersSnapshot.docs.toList();
-      usersList.sort((a, b) {
-        final aHope = (a.data()['lifetime_donated_hope'] ?? 0) as num;
-        final bHope = (b.data()['lifetime_donated_hope'] ?? 0) as num;
-        final hopeDiff = bHope.compareTo(aHope); // Büyükten küçüğe
-        if (hopeDiff != 0) return hopeDiff;
-        return a.id.compareTo(b.id); // Eşitse UID'ye göre
-      });
+      final logsSnapshot2 = await firestore
+          .collection('activity_logs')
+          .where('action_type', isEqualTo: 'donation')
+          .get();
       
-      int donationRank = 0;
-      for (int i = 0; i < usersList.length; i++) {
-        if (usersList[i].id == uid) {
-          donationRank = i + 1;
-          break;
+      final allDocs = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+      for (var doc in logsSnapshot1.docs) {
+        allDocs[doc.id] = doc;
+      }
+      for (var doc in logsSnapshot2.docs) {
+        allDocs[doc.id] = doc;
+      }
+      
+      final Map<String, double> userDonations = {};
+      
+      for (var doc in allDocs.values) {
+        final data = doc.data();
+        
+        DateTime? logDate;
+        if (data['created_at'] != null) {
+          logDate = (data['created_at'] as Timestamp).toDate();
+        } else if (data['timestamp'] != null) {
+          logDate = (data['timestamp'] as Timestamp).toDate();
+        }
+        
+        if (logDate == null || logDate.isBefore(monthStart)) continue;
+        
+        final oduid = data['user_id'] ?? '';
+        final amount = (data['amount'] ?? data['hope_amount'] ?? 0).toDouble();
+        
+        if (oduid.isNotEmpty && amount > 0) {
+          userDonations[oduid] = (userDonations[oduid] ?? 0) + amount;
         }
       }
+      
+      // Sırala ve kullanıcının sırasını bul
+      final donationsList = userDonations.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      
+      int donationRank = donationsList.indexWhere((e) => e.key == uid);
+      donationRank = donationRank == -1 ? donationsList.length + 1 : donationRank + 1;
       
       if (mounted) {
         setState(() {
-          _stepRank = stepRank > 0 ? stepRank : null;
-          _donationRank = donationRank > 0 ? donationRank : null;
+          _stepRank = stepRank;
+          _donationRank = donationRank;
         });
       }
     } catch (e) {
@@ -273,11 +325,100 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     }
   }
 
+  /// Profil Düzenle Dialog içinde Şifre Oluştur Bölümü
+  Widget _buildPasswordSection(LanguageProvider lang, bool hasPassword) {
+    final authProvider = _currentUser?.authProvider;
+    
+    // Sadece Google veya Apple kullanıcıları için göster
+    if (authProvider != 'google' && authProvider != 'apple') {
+      return const SizedBox.shrink();
+    }
+    
+    // Zaten şifresi varsa gösterme
+    if (hasPassword) {
+      return const SizedBox.shrink();
+    }
+    
+    return Column(
+      children: [
+        const SizedBox(height: 20),
+        const Divider(),
+        const SizedBox(height: 12),
+        InkWell(
+          onTap: () {
+            Navigator.pop(context); // Önce edit dialog'u kapat
+            _showCreatePasswordDialog(lang);
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF6EC6B5).withOpacity(0.1),
+                  const Color(0xFFE07A5F).withOpacity(0.1),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: const Color(0xFF6EC6B5).withOpacity(0.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF6EC6B5), Color(0xFFE07A5F)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.lock_outline, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        lang.isTurkish ? 'Şifre Oluştur' : 'Create Password',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        lang.isTurkish 
+                            ? 'E-posta ile de giriş yap'
+                            : 'Also login with email',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Color(0xFF6EC6B5)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   /// Profil düzenleme dialogu
   Future<void> _showEditProfileDialog() async {
     final nameController = TextEditingController(text: _currentUser?.fullName ?? '');
     final nicknameController = TextEditingController(text: _currentUser?.nickname ?? '');
     final lang = context.read<LanguageProvider>();
+    
+    // Şifre durumunu önceden kontrol et
+    final hasPassword = await AuthService().hasEmailPasswordProvider();
+    
+    if (!mounted) return;
     
     final result = await showDialog<bool>(
       context: context,
@@ -329,6 +470,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     : 'Your name will appear abbreviated in donation history. Nickname appears in leaderboards.',
                 style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
+              // Şifre Oluştur Butonu - Google/Apple kullanıcıları için
+              _buildPasswordSection(lang, hasPassword),
             ],
           ),
         ),
@@ -1105,8 +1248,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                           )
                         : LinearGradient(
                             colors: [
-                              (iconColor ?? const Color(0xFF6EC6B5))!.withOpacity(0.15),
-                              (iconColor ?? const Color(0xFFE07A5F))!.withOpacity(0.08),
+                              (iconColor ?? const Color(0xFF6EC6B5)).withOpacity(0.15),
+                              (iconColor ?? const Color(0xFFE07A5F)).withOpacity(0.08),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -1261,6 +1404,228 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Şifre Oluştur Dialog
+  Future<void> _showCreatePasswordDialog(LanguageProvider lang) async {
+    final passwordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool isPasswordVisible = false;
+    bool isConfirmVisible = false;
+    String? errorMessage;
+    bool isLoading = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6EC6B5), Color(0xFFE07A5F)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.lock_outline, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  lang.isTurkish ? 'Şifre Oluştur' : 'Create Password',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  lang.isTurkish 
+                      ? 'Şifre oluşturduktan sonra e-posta adresiniz ve şifrenizle de giriş yapabilirsiniz.'
+                      : 'After creating a password, you can also login with your email and password.',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                ),
+                const SizedBox(height: 20),
+                // E-posta (sadece bilgi)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.email_outlined, color: Colors.grey),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _currentUser?.email ?? '',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Şifre
+                TextField(
+                  controller: passwordController,
+                  obscureText: !isPasswordVisible,
+                  decoration: InputDecoration(
+                    labelText: lang.isTurkish ? 'Şifre' : 'Password',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(isPasswordVisible ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setDialogState(() => isPasswordVisible = !isPasswordVisible),
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF6EC6B5), width: 2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Şifre Onay
+                TextField(
+                  controller: confirmPasswordController,
+                  obscureText: !isConfirmVisible,
+                  decoration: InputDecoration(
+                    labelText: lang.isTurkish ? 'Şifre Tekrar' : 'Confirm Password',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(isConfirmVisible ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setDialogState(() => isConfirmVisible = !isConfirmVisible),
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF6EC6B5), width: 2),
+                    ),
+                  ),
+                ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red[50],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            errorMessage!,
+                            style: const TextStyle(color: Colors.red, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                lang.isTurkish ? 'İptal' : 'Cancel',
+                style: const TextStyle(color: Colors.grey),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6EC6B5), Color(0xFFE07A5F)],
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ElevatedButton(
+                onPressed: isLoading ? null : () async {
+                  final password = passwordController.text;
+                  final confirmPassword = confirmPasswordController.text;
+                  
+                  // Validasyon
+                  if (password.isEmpty || confirmPassword.isEmpty) {
+                    setDialogState(() => errorMessage = lang.isTurkish 
+                        ? 'Tüm alanları doldurun'
+                        : 'Fill in all fields');
+                    return;
+                  }
+                  
+                  if (password.length < 6) {
+                    setDialogState(() => errorMessage = lang.isTurkish 
+                        ? 'Şifre en az 6 karakter olmalı'
+                        : 'Password must be at least 6 characters');
+                    return;
+                  }
+                  
+                  if (password != confirmPassword) {
+                    setDialogState(() => errorMessage = lang.isTurkish 
+                        ? 'Şifreler eşleşmiyor'
+                        : 'Passwords do not match');
+                    return;
+                  }
+                  
+                  setDialogState(() {
+                    isLoading = true;
+                    errorMessage = null;
+                  });
+                  
+                  final result = await AuthService().createPasswordForSocialUser(
+                    password: password,
+                  );
+                  
+                  if (result['success'] == true) {
+                    Navigator.pop(dialogContext);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('🎉 ${result['message']}'),
+                          backgroundColor: const Color(0xFF6EC6B5),
+                        ),
+                      );
+                      // Sayfayı yenile
+                      setState(() {});
+                    }
+                  } else {
+                    setDialogState(() {
+                      isLoading = false;
+                      errorMessage = result['error'];
+                    });
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: isLoading 
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : Text(lang.isTurkish ? 'Oluştur' : 'Create'),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -2653,16 +3018,17 @@ class TermsOfServicePage extends StatelessWidget {
     return [
       _buildSectionTitle('HOPESTEPS KULLANIM KOŞULLARI VE LİSANS SÖZLEŞMESİ'),
       _buildHighlightBox(
-        'Son Güncelleme: 23 Aralık 2025\n\nBu Kullanım Koşulları, OneHopeStep (Bir Adım Umut) mobil uygulamasını kullanımınızı düzenleyen yasal bir sözleşmedir. Uygulamayı indirip kullanarak bu koşulları kabul etmiş sayılırsınız.',
+        'Son Güncelleme: 9 Ocak 2026\n\nBu Kullanım Koşulları, OneHopeStep (Bir Adım Umut) mobil uygulamasını kullanımınızı düzenleyen yasal bir sözleşmedir. Uygulamayı indirip kullanarak bu koşulları kabul etmiş sayılırsınız.',
       ),
       
       _buildSectionTitle('1. Tanım ve Taraflar'),
       _buildBulletPoint('"Uygulama" veya "OneHopeStep": OneHopeStep (Bir Adım Umut) mobil uygulaması'),
       _buildBulletPoint('"Kullanıcı": Uygulamayı indiren ve kullanan gerçek kişi'),
       _buildBulletPoint('"Hope": Uygulama içinde adımların dönüştürüldüğü sanal puan birimi'),
-      _buildBulletPoint('"Bağış": Hope puanlarının hayır kurumlarına aktarılması işlemi'),
+      _buildBulletPoint('"Bağış": Hope puanlarının bağış alıcılarına aktarılması işlemi'),
+      _buildBulletPoint('"Bağış Alıcıları": Uygulama içinde listelenen ve bağış kabul eden kurum/kuruluşlar'),
       const SizedBox(height: 8),
-      const Text('OneHopeStep, sosyal sorumluluk amacıyla geliştirilmiş olup, kullanıcıların adımlarını Hope puanına dönüştürerek hayır kurumlarına bağış yapmalarını sağlayan ücretsiz bir mobil uygulamadır.'),
+      const Text('OneHopeStep, sosyal sorumluluk amacıyla geliştirilmiş olup, kullanıcıların adımlarını Hope puanına dönüştürerek bağış alıcılarına bağış yapmalarını sağlayan ücretsiz bir mobil uygulamadır.'),
       
       _buildSectionTitle('2. Uygulamaya Katılım'),
       _buildBulletPoint('Uygulamayı App Store veya Google Play Store\'dan ücretsiz olarak indirebilirsiniz'),
@@ -2670,42 +3036,119 @@ class TermsOfServicePage extends StatelessWidget {
       _buildBulletPoint('18 yaşından küçük kullanıcıların veli/vasi onayı alması gerekmektedir'),
       _buildBulletPoint('Her kullanıcı yalnızca bir (1) hesap oluşturabilir'),
       
-      _buildSectionTitle('3. Hope Sistemi ve Adım Dönüşümü'),
-      _buildBulletPoint('Uygulama, cihazınızın sağlık sensörlerinden adım verilerini alır'),
-      _buildBulletPoint('Adımlar, uygulama tarafından belirlenen oranda Hope puanına dönüştürülür'),
-      _buildBulletPoint('Dönüşüm oranları uygulama tarafından değiştirilebilir'),
+      _buildSectionTitle('3. Adım Dönüştürme Kuralları'),
+      _buildBulletPoint('Tek seferde maksimum 2.500 adım dönüştürülebilir'),
+      _buildBulletPoint('Her dönüştürme arasında 10 dakika bekleme süresi vardır'),
+      _buildBulletPoint('100 adım = 1 Hope oranıyla dönüştürülür'),
+      _buildBulletPoint('Progress bar dolduğunda 2x bonus: 2.500 adım = 50 Hope'),
+      _buildBulletPoint('Günlük adımlar gece 00:00\'da sıfırlanır'),
+      _buildBulletPoint('Her adım dönüştürme işlemi için reklam izlenmesi gerekir'),
       
-      _buildWarningBox('ÖNEMLİ: Hope puanları yalnızca uygulama içindeki hayır kurumlarına bağış yapmak için kullanılabilir.\n\n• Nakit paraya dönüştürülemez\n• Başka kullanıcılara transfer edilemez\n• Satılamaz veya takas edilemez\n• Herhangi bir maddi değer ifade etmez'),
+      _buildSectionTitle('4. Taşıma (Carryover) ve Referans Adımları'),
+      _buildBulletPoint('Dönüştürülmemiş günlük adımlar ay sonuna kadar "taşınan adım" olarak saklanır'),
+      _buildBulletPoint('Taşınan adımlar her ayın 1\'inde otomatik olarak silinir'),
+      _buildBulletPoint('Davet sistemiyle kazanılan referans bonus adımları SÜRESİZ geçerlidir, ayın 1\'inde silinmez'),
+      _buildWarningBox('ÖNEMLİ: Günlük adımlarınızı ay sonuna kadar dönüştürmeyi unutmayın. Ayın 1\'inde taşınan adımlar sıfırlanır!'),
       
-      _buildSectionTitle('4. Tek Cihaz - Tek Hesap Kuralı'),
-      _buildWarningBox('UYARI - DOLANDIRICILIK ÖNLEMİ:\n\n• Her Hesap yalnızca bir cihaza bağlı olabilir\n• Aynı cihazdan birden fazla hesaba adım aktarımı yapılamaz\n• Bir cihaz, aynı gün içinde yalnızca bir hesaba adım dönüştürebilir\n• Bu kuralın ihlal edildiği durumlarda hesaplar askıya alınabilir veya kapatılabilir'),
+      _buildSectionTitle('5. Davet (Referans) Sistemi'),
+      _buildBulletPoint('Her kullanıcının benzersiz bir kişisel davet kodu vardır'),
+      _buildBulletPoint('Davet kodunuzla kayıt olan yeni kullanıcı için her iki tarafa 100.000 bonus adım verilir'),
+      _buildBulletPoint('Davet bonus adımları SÜRESİZ geçerlidir (ay sonunda silinmez)'),
+      _buildBulletPoint('Davet bonus adımları da reklam izleyerek Hope\'a dönüştürülür'),
       
-      _buildSectionTitle('5. Yasaklı Davranışlar'),
+      _buildSectionTitle('6. Takım Sistemi'),
+      _buildBulletPoint('Kullanıcılar takım kurabilir veya mevcut takımlara katılabilir'),
+      _buildBulletPoint('Takımların benzersiz davet kodu vardır'),
+      _buildBulletPoint('Takım davet koduyla katılan yeni üyeler hem takıma hem kendilerine 100.000 bonus adım kazandırır'),
+      _buildBulletPoint('Takım sıralamada ilk 3\'e girdiğinde takıma bonus adım ödülü verilir'),
+      _buildBulletPoint('Takım bonus adımlarını takımdaki herhangi bir üye dönüştürebilir'),
+      _buildBulletPoint('Takım bonusunu kim dönüştürürse Hope o kullanıcının cüzdanına eklenir'),
+      
+      _buildSectionTitle('7. Sıralama ve Ödül Sistemi'),
+      const Text('Her ay sıfırlanan 3 kategori vardır. Sıralamalar aylık olup, her ayın 1\'inde sıfırlanır:'),
+      const SizedBox(height: 8),
+      _buildBulletPoint('Umut Hareketi: Bu ay en çok GERÇEK adım dönüştürenler'),
+      _buildBulletPoint('Umut Elçileri: Bu ay en çok Hope bağışlayanlar'),
+      _buildBulletPoint('Umut Ormanı: Bu ay en çok bağış yapan takımlar'),
+      const SizedBox(height: 12),
+      const Text('Ödül Dağılımı:', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      _buildBulletPoint('🥇 1. Sıra: 500.000 bonus adım'),
+      _buildBulletPoint('🥈 2. Sıra: 300.000 bonus adım'),
+      _buildBulletPoint('🥉 3. Sıra: 100.000 bonus adım'),
+      const SizedBox(height: 12),
+      const Text('Ödül Mantığı:', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      _buildBulletPoint('Bireysel ödüller (Umut Hareketi, Umut Elçileri): Kullanıcının kişisel sıralama bonus adımlarına eklenir'),
+      _buildBulletPoint('Takım ödülleri (Umut Ormanı): Takımın bonus adım havuzuna eklenir'),
+      _buildBulletPoint('Ödüller ay sonunda Cloud Function tarafından otomatik dağıtılır'),
+      _buildWarningBox('NOT: Sıralama ödülü olarak kazanılan bonus adımlar da reklam izleyerek Hope\'a dönüştürülür. Takım bonusunu takımdaki herhangi bir üye dönüştürebilir.'),
+      
+      _buildSectionTitle('8. Hope\'un Enflasyonist Doğası'),
+      _buildHighlightBox('Hope, sabit değerli bir birim DEĞİLDİR. Değeri aylık olarak hesaplanır ve çeşitli faktörlere bağlı olarak her ay DEĞİŞEBİLİR.'),
+      const SizedBox(height: 12),
+      const Text('Hope Değeri Nasıl Hesaplanır?', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      _buildBulletPoint('Her ayın sonunda toplam reklam geliri hesaplanır'),
+      _buildBulletPoint('Operasyonel giderler düşülür (sunucu, altyapı, platform komisyonları)'),
+      _buildBulletPoint('Kalan miktar, o ay üretilen toplam Hope miktarına bölünür'),
+      _buildBulletPoint('Formül: 1 Hope = (Aylık Reklam Geliri - Giderler) / Toplam Hope'),
+      const SizedBox(height: 12),
+      const Text('Neden Enflasyonist?', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      _buildBulletPoint('Kullanıcı sayısı arttıkça üretilen Hope miktarı artar'),
+      _buildBulletPoint('Reklam gelirleri aynı oranda artmayabilir'),
+      _buildBulletPoint('Bu durumda birim Hope değeri AZALIR'),
+      _buildBulletPoint('Tersi durumda (az Hope, çok gelir) değer ARTABİLİR'),
+      const SizedBox(height: 12),
+      const Text('Operasyonel Giderler:', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      _buildBulletPoint('Firebase/Google Cloud sunucu maliyetleri'),
+      _buildBulletPoint('Veritabanı ve depolama giderleri'),
+      _buildBulletPoint('App Store ve Google Play komisyonları'),
+      _buildBulletPoint('Reklam ağı komisyonları (AdMob vb.)'),
+      _buildWarningBox('KULLANICI KABULÜ: Hope\'un değerinin sabit olmadığını, her ay değişebileceğini ve bu değişkenliğin tamamen piyasa koşullarına bağlı olduğunu kabul ediyorum. Uygulama, Hope için herhangi bir minimum değer garantisi VERMEZ.'),
+      
+      _buildSectionTitle('9. Bağış Sistemi ve Aktarım Süreci'),
+      _buildBulletPoint('Kullanıcı, cüzdanındaki Hope\'u uygulama içindeki bağış alıcılarına bağışlayabilir'),
+      _buildBulletPoint('Bağış yapıldığında Hope o anki TL değeri üzerinden kaydedilir'),
+      _buildBulletPoint('Bağışlar "onay bekliyor" statüsünde bekletilir'),
+      _buildBulletPoint('Reklam gelirleri kesinleştikten sonra bağışlar bağış alıcılarına aktarılır'),
+      _buildBulletPoint('Aktarım süresi 30 güne kadar sürebilir'),
+      _buildWarningBox('ÖNEMLİ: Hope puanları para birimi değildir. Nakit olarak talep edilemez, başkasına transfer edilemez, satılamaz veya takas edilemez.'),
+      
+      _buildSectionTitle('10. Tek Cihaz - Tek Hesap Kuralı'),
+      _buildWarningBox('DOLANDIRICILIK ÖNLEMİ:\n\n• Her hesap yalnızca bir cihaza bağlı olabilir\n• Bir cihaz aynı gün içinde yalnızca bir hesaba adım dönüştürebilir\n• Aynı cihazdan birden fazla hesaba adım aktarımı engellenir\n• Bu kuralın ihlalinde hesap askıya alınır veya kalıcı olarak kapatılır'),
+      
+      _buildSectionTitle('11. Yasaklı Davranışlar ve Yaptırımlar'),
       _buildBulletPoint('Sahte adım verisi oluşturma veya manipüle etme'),
       _buildBulletPoint('Üçüncü parti yazılımlar kullanarak adım sayısını yapay olarak artırma'),
       _buildBulletPoint('Birden fazla hesap oluşturma'),
-      _buildBulletPoint('Başkasının hesabını kullanma veya hesabını başkasına kullandırma'),
+      _buildBulletPoint('Başkasının hesabını kullanma veya kendi hesabını başkasına kullandırma'),
       _buildBulletPoint('Uygulamanın güvenlik sistemlerini atlatmaya çalışma'),
+      _buildBulletPoint('Takım bonus sistemini kötüye kullanma'),
+      _buildWarningBox('YAPTRIM: Bu davranışlar tespit edildiğinde hesap kalıcı olarak kapatılır, tüm Hope bakiyesi ve veriler silinir. Hukuki işlem başlatılabilir.'),
       
-      _buildSectionTitle('6. Hesap Yönetimi'),
+      _buildSectionTitle('12. Hesap Yönetimi'),
       _buildBulletPoint('Hesabınızın güvenliğinden siz sorumlusunuz'),
       _buildBulletPoint('Şifrenizi kimseyle paylaşmamalısınız'),
       _buildBulletPoint('Hesabınızı istediğiniz zaman uygulama ayarlarından silebilirsiniz'),
       _buildBulletPoint('Hesap silindiğinde tüm Hope bakiyesi ve veriler kalıcı olarak silinir'),
       
-      _buildSectionTitle('7. Sorumluluk Sınırlandırması'),
+      _buildSectionTitle('13. Sorumluluk Sınırlandırması'),
       const Text('OneHopeStep uygulaması "OLDUĞU GİBİ" sunulmaktadır. Aşağıdaki konularda herhangi bir garanti verilmemektedir:'),
       const SizedBox(height: 8),
       _buildBulletPoint('Uygulamanın kesintisiz veya hatasız çalışacağı'),
       _buildBulletPoint('Adım sayımının %100 doğru olacağı'),
-      _buildBulletPoint('Belirli bir amaca uygunluk'),
+      _buildBulletPoint('Hope değerinin belirli bir seviyede kalacağı'),
+      _buildBulletPoint('Reklam gelirlerinin belirli bir miktarda olacağı'),
       
-      _buildSectionTitle('8. Uygulanacak Hukuk'),
+      _buildSectionTitle('14. Uygulanacak Hukuk'),
       _buildBulletPoint('Bu sözleşme Türkiye Cumhuriyeti kanunlarına tabidir'),
       _buildBulletPoint('Uyuşmazlıklarda Türkiye Cumhuriyeti mahkemeleri yetkilidir'),
       _buildBulletPoint('Tüketici hakları saklıdır'),
       
-      _buildSectionTitle('9. İletişim'),
+      _buildSectionTitle('15. İletişim'),
       const Text('Sorularınız veya şikayetleriniz için:'),
       const SizedBox(height: 8),
       _buildBulletPoint('E-posta: hopesteps.app@gmail.com'),
@@ -2713,7 +3156,7 @@ class TermsOfServicePage extends StatelessWidget {
       const SizedBox(height: 20),
       Center(
         child: Text(
-          'Son Güncelleme: 23 Aralık 2025',
+          'Son Güncelleme: 9 Ocak 2026',
           style: TextStyle(color: Colors.grey[600], fontSize: 12),
         ),
       ),
@@ -2724,16 +3167,17 @@ class TermsOfServicePage extends StatelessWidget {
     return [
       _buildSectionTitle('HOPESTEPS TERMS OF SERVICE AND LICENSE AGREEMENT'),
       _buildHighlightBox(
-        'Last Updated: December 23, 2025\n\nThese Terms of Service constitute a legal agreement governing your use of the OneHopeStep (Bir Adım Umut) mobile application. By downloading and using the application, you agree to these terms.',
+        'Last Updated: January 9, 2026\n\nThese Terms of Service constitute a legal agreement governing your use of the OneHopeStep (Bir Adım Umut) mobile application. By downloading and using the application, you agree to these terms.',
       ),
       
       _buildSectionTitle('1. Definitions and Parties'),
       _buildBulletPoint('"Application" or "OneHopeStep": The OneHopeStep (Bir Adım Umut) mobile application'),
       _buildBulletPoint('"User": The natural person who downloads and uses the application'),
       _buildBulletPoint('"Hope": The virtual point unit into which steps are converted'),
-      _buildBulletPoint('"Donation": The process of transferring Hope points to charities'),
+      _buildBulletPoint('"Donation": The process of transferring Hope points to donation recipients'),
+      _buildBulletPoint('"Donation Recipients": Organizations listed in the app that accept donations'),
       const SizedBox(height: 8),
-      const Text('OneHopeStep is a free mobile application developed for social responsibility purposes, enabling users to convert their steps into Hope points and donate to charities.'),
+      const Text('OneHopeStep is a free mobile application developed for social responsibility purposes, enabling users to convert their steps into Hope points and donate to donation recipients.'),
       
       _buildSectionTitle('2. Participation in the Application'),
       _buildBulletPoint('You can download the application for free from the App Store or Google Play Store'),
@@ -2741,42 +3185,119 @@ class TermsOfServicePage extends StatelessWidget {
       _buildBulletPoint('Users under 18 years of age must obtain parental/guardian consent'),
       _buildBulletPoint('Each user may only create one (1) account'),
       
-      _buildSectionTitle('3. Hope System and Step Conversion'),
-      _buildBulletPoint('The application receives step data from your device\'s health sensors'),
-      _buildBulletPoint('Steps are converted to Hope points at the rate determined by the application'),
-      _buildBulletPoint('Conversion rates may be changed by the application'),
+      _buildSectionTitle('3. Step Conversion Rules'),
+      _buildBulletPoint('Maximum 2,500 steps can be converted at once'),
+      _buildBulletPoint('10-minute cooldown between each conversion'),
+      _buildBulletPoint('Conversion rate: 100 steps = 1 Hope'),
+      _buildBulletPoint('When progress bar is full, 2x bonus: 2,500 steps = 50 Hope'),
+      _buildBulletPoint('Daily steps reset at midnight (00:00)'),
+      _buildBulletPoint('Watching an ad is required for each step conversion'),
       
-      _buildWarningBox('IMPORTANT: Hope points can only be used to donate to charities within the application.\n\n• Cannot be converted to cash\n• Cannot be transferred to other users\n• Cannot be sold or exchanged\n• Do not represent any monetary value'),
+      _buildSectionTitle('4. Carryover and Referral Bonus Steps'),
+      _buildBulletPoint('Unconverted daily steps are stored as "carryover steps" until month end'),
+      _buildBulletPoint('Carryover steps are automatically deleted on the 1st of each month'),
+      _buildBulletPoint('Referral bonus steps earned through invite system are PERMANENT, not deleted on the 1st'),
+      _buildWarningBox('IMPORTANT: Don\'t forget to convert your daily steps before month end. Carryover steps are reset on the 1st of each month!'),
       
-      _buildSectionTitle('4. One Device - One Account Rule'),
-      _buildWarningBox('WARNING - FRAUD PREVENTION:\n\n• Each Account can only be linked to one device\n• Step transfers cannot be made to multiple accounts from the same device\n• A device can only convert steps for one account within the same day\n• Accounts may be suspended or closed if this rule is violated'),
+      _buildSectionTitle('5. Referral System'),
+      _buildBulletPoint('Each user has a unique personal invite code'),
+      _buildBulletPoint('When a new user registers with your invite code, both parties receive 100,000 bonus steps'),
+      _buildBulletPoint('Referral bonus steps are PERMANENT (not deleted at month end)'),
+      _buildBulletPoint('Referral bonus steps are also converted to Hope by watching ads'),
       
-      _buildSectionTitle('5. Prohibited Behaviors'),
+      _buildSectionTitle('6. Team System'),
+      _buildBulletPoint('Users can create teams or join existing teams'),
+      _buildBulletPoint('Teams have unique invite codes'),
+      _buildBulletPoint('New members joining via team invite code earn 100,000 bonus steps for both the team and themselves'),
+      _buildBulletPoint('Teams that rank in top 3 receive bonus step rewards for the team'),
+      _buildBulletPoint('Any team member can convert team bonus steps'),
+      _buildBulletPoint('Whoever converts team bonus gets the Hope added to their wallet'),
+      
+      _buildSectionTitle('7. Ranking and Reward System'),
+      const Text('There are 3 categories that reset monthly. Rankings are monthly and reset on the 1st of each month:'),
+      const SizedBox(height: 8),
+      _buildBulletPoint('Step Champions: Most REAL steps converted this month'),
+      _buildBulletPoint('Hope Ambassadors: Most Hope donated this month'),
+      _buildBulletPoint('Hope Forest: Teams with most donations this month'),
+      const SizedBox(height: 12),
+      const Text('Reward Distribution:', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      _buildBulletPoint('🥇 1st Place: 500,000 bonus steps'),
+      _buildBulletPoint('🥈 2nd Place: 300,000 bonus steps'),
+      _buildBulletPoint('🥉 3rd Place: 100,000 bonus steps'),
+      const SizedBox(height: 12),
+      const Text('Reward Logic:', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      _buildBulletPoint('Individual rewards (Step Champions, Hope Ambassadors): Added to user\'s personal ranking bonus steps'),
+      _buildBulletPoint('Team rewards (Hope Forest): Added to team\'s bonus step pool'),
+      _buildBulletPoint('Rewards are automatically distributed by Cloud Function at month end'),
+      _buildWarningBox('NOTE: Bonus steps earned as ranking rewards are also converted to Hope by watching ads. Any team member can convert team bonus steps.'),
+      
+      _buildSectionTitle('8. Inflationary Nature of Hope'),
+      _buildHighlightBox('Hope is NOT a fixed-value unit. Its value is calculated monthly and may CHANGE each month based on various factors.'),
+      const SizedBox(height: 12),
+      const Text('How is Hope Value Calculated?', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      _buildBulletPoint('Total ad revenue is calculated at the end of each month'),
+      _buildBulletPoint('Operational costs are deducted (servers, infrastructure, platform commissions)'),
+      _buildBulletPoint('Remaining amount is divided by total Hope produced that month'),
+      _buildBulletPoint('Formula: 1 Hope = (Monthly Ad Revenue - Costs) / Total Hope'),
+      const SizedBox(height: 12),
+      const Text('Why Inflationary?', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      _buildBulletPoint('As user count increases, Hope production increases'),
+      _buildBulletPoint('Ad revenue may not increase at the same rate'),
+      _buildBulletPoint('In this case, unit Hope value DECREASES'),
+      _buildBulletPoint('In reverse case (less Hope, more revenue), value may INCREASE'),
+      const SizedBox(height: 12),
+      const Text('Operational Costs:', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      _buildBulletPoint('Firebase/Google Cloud server costs'),
+      _buildBulletPoint('Database and storage expenses'),
+      _buildBulletPoint('App Store and Google Play commissions'),
+      _buildBulletPoint('Ad network commissions (AdMob etc.)'),
+      _buildWarningBox('USER ACCEPTANCE: I acknowledge that Hope\'s value is not fixed, may change each month, and this variability is entirely dependent on market conditions. The application provides NO minimum value guarantee for Hope.'),
+      
+      _buildSectionTitle('9. Donation System and Transfer Process'),
+      _buildBulletPoint('User can donate Hope in their wallet to donation recipients within the app'),
+      _buildBulletPoint('When donated, Hope is recorded at its current TL value'),
+      _buildBulletPoint('Donations are held in "pending approval" status'),
+      _buildBulletPoint('After ad revenue is finalized, donations are transferred to donation recipients'),
+      _buildBulletPoint('Transfer process may take up to 30 days'),
+      _buildWarningBox('IMPORTANT: Hope points are not currency. Cannot be claimed as cash, transferred to others, sold, or exchanged.'),
+      
+      _buildSectionTitle('10. One Device - One Account Rule'),
+      _buildWarningBox('FRAUD PREVENTION:\n\n• Each account can only be linked to one device\n• A device can only convert steps for one account within the same day\n• Step transfers from the same device to multiple accounts are blocked\n• Violation of this rule results in account suspension or permanent closure'),
+      
+      _buildSectionTitle('11. Prohibited Behaviors and Sanctions'),
       _buildBulletPoint('Creating or manipulating fake step data'),
       _buildBulletPoint('Using third-party software to artificially increase step counts'),
       _buildBulletPoint('Creating multiple accounts'),
       _buildBulletPoint('Using someone else\'s account or allowing others to use your account'),
       _buildBulletPoint('Attempting to bypass the application\'s security systems'),
+      _buildBulletPoint('Abusing the team bonus system'),
+      _buildWarningBox('SANCTION: When these behaviors are detected, account is permanently closed, all Hope balance and data are deleted. Legal action may be initiated.'),
       
-      _buildSectionTitle('6. Account Management'),
+      _buildSectionTitle('12. Account Management'),
       _buildBulletPoint('You are responsible for the security of your account'),
       _buildBulletPoint('You should not share your password with anyone'),
       _buildBulletPoint('You can delete your account at any time from the application settings'),
       _buildBulletPoint('When the account is deleted, all Hope balance and data are permanently deleted'),
       
-      _buildSectionTitle('7. Limitation of Liability'),
+      _buildSectionTitle('13. Limitation of Liability'),
       const Text('The OneHopeStep application is provided "AS IS". No warranty is given regarding:'),
       const SizedBox(height: 8),
       _buildBulletPoint('That the application will operate without interruption or error'),
       _buildBulletPoint('That step counting will be 100% accurate'),
-      _buildBulletPoint('Fitness for a particular purpose'),
+      _buildBulletPoint('That Hope value will remain at a certain level'),
+      _buildBulletPoint('That ad revenue will be a certain amount'),
       
-      _buildSectionTitle('8. Applicable Law'),
+      _buildSectionTitle('14. Applicable Law'),
       _buildBulletPoint('This agreement is subject to the laws of the Republic of Turkey'),
       _buildBulletPoint('Turkish courts have jurisdiction over disputes'),
       _buildBulletPoint('Consumer rights are reserved'),
       
-      _buildSectionTitle('9. Contact'),
+      _buildSectionTitle('15. Contact'),
       const Text('For your questions or complaints:'),
       const SizedBox(height: 8),
       _buildBulletPoint('Email: hopesteps.app@gmail.com'),
@@ -2784,7 +3305,7 @@ class TermsOfServicePage extends StatelessWidget {
       const SizedBox(height: 20),
       Center(
         child: Text(
-          'Last Updated: December 23, 2025',
+          'Last Updated: January 9, 2026',
           style: TextStyle(color: Colors.grey[600], fontSize: 12),
         ),
       ),

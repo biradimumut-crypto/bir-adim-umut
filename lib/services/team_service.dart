@@ -3,9 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../models/team_model.dart';
 import '../models/team_member_model.dart';
-import '../models/notification_model.dart';
-import '../models/activity_log_model.dart';
-import '../models/user_model.dart';
 
 class TeamService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;

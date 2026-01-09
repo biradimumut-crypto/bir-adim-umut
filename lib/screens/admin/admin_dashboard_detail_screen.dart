@@ -59,7 +59,11 @@ class _AdminDashboardDetailScreenState extends State<AdminDashboardDetailScreen>
     try {
       switch (widget.type) {
         case DashboardDetailType.dailySteps:
-          _dailyStepAnalytics = await _adminService.getDailyStepAnalytics();
+          // Özet panel için de tarih filtresini kullan
+          _dailyStepAnalytics = await _adminService.getDailyStepAnalyticsForRange(
+            startDate: _startDate,
+            endDate: _endDate,
+          );
           _records = await _adminService.getDetailedStepRecords(
             startDate: _startDate,
             endDate: _endDate,
@@ -67,16 +71,23 @@ class _AdminDashboardDetailScreenState extends State<AdminDashboardDetailScreen>
           break;
           
         case DashboardDetailType.carryover:
-          _carryoverAnalytics = await _adminService.getCarryoverAnalytics();
-          // Carryover için step records kullanıyoruz
-          _records = await _adminService.getDetailedStepRecords(
+          // Carryover için tarih aralığı ile analiz
+          _carryoverAnalytics = await _adminService.getCarryoverAnalyticsForRange(
+            startDate: _startDate,
+            endDate: _endDate,
+          );
+          _records = await _adminService.getDetailedCarryoverRecords(
             startDate: _startDate,
             endDate: _endDate,
           );
           break;
           
         case DashboardDetailType.referral:
-          _referralAnalytics = await _adminService.getReferralAnalytics();
+          // Referral için tarih aralığı ile analiz
+          _referralAnalytics = await _adminService.getReferralAnalyticsForRange(
+            startDate: _startDate,
+            endDate: _endDate,
+          );
           _records = await _adminService.getDetailedReferralRecords(
             startDate: _startDate,
             endDate: _endDate,
@@ -399,17 +410,16 @@ class _AdminDashboardDetailScreenState extends State<AdminDashboardDetailScreen>
                   text: TextSpan(
                     style: const TextStyle(fontSize: 11, color: Colors.black87),
                     children: [
-                      const TextSpan(text: '2x Bonus: Her '),
+                      const TextSpan(text: '2x Bonus: '),
                       const TextSpan(
-                        text: '2.500 adım = 25 Hope',
+                        text: '100 adım = 1H normal + 1H bonus',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      const TextSpan(text: ' normal, '),
+                      const TextSpan(text: ' = '),
                       const TextSpan(
-                        text: '50 Hope',
+                        text: '2 Hope toplam',
                         style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6EC6B5)),
                       ),
-                      const TextSpan(text: ' bonuslu'),
                     ],
                   ),
                 ),
@@ -1040,7 +1050,7 @@ class _AdminDashboardDetailScreenState extends State<AdminDashboardDetailScreen>
                       runSpacing: 8,
                       children: List.generate(12, (index) {
                         final month = index + 1;
-                        final isSelected = month == tempMonth && tempYear == _selectedYear;
+                        final isSelected = month == tempMonth && tempYear == tempYear; // Seçili ay kontrolü
                         final isDisabled = tempYear == DateTime.now().year && month > DateTime.now().month;
                         
                         return GestureDetector(

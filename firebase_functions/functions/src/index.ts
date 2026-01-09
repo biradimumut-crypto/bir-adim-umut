@@ -1867,6 +1867,7 @@ export const distributeMonthlyLeaderboardRewards = functions.pubsub
 /**
  * Umut Hareketi ödüllerini dağıt
  * Sadece gerçek adımlar sayılır: step_conversion, step_conversion_2x, carryover_conversion
+ * Flutter ile tutarlı: hem created_at hem timestamp alanları kontrol edilir
  */
 async function distributeStepRewards(
   monthStart: Date,
@@ -1876,17 +1877,43 @@ async function distributeStepRewards(
 ) {
   const validTypes = ["step_conversion", "step_conversion_2x", "carryover_conversion"];
   const userSteps: Record<string, number> = {};
+  const processedDocs = new Set<string>(); // Duplicate önleme
   
   // Her activity type için sorgula
   for (const activityType of validTypes) {
-    const snapshot = await db
+    // 1. created_at ile sorgula
+    const snapshot1 = await db
       .collection("activity_logs")
       .where("activity_type", "==", activityType)
       .where("created_at", ">=", admin.firestore.Timestamp.fromDate(monthStart))
       .where("created_at", "<=", admin.firestore.Timestamp.fromDate(monthEnd))
       .get();
     
-    for (const doc of snapshot.docs) {
+    for (const doc of snapshot1.docs) {
+      if (processedDocs.has(doc.id)) continue;
+      processedDocs.add(doc.id);
+      
+      const data = doc.data();
+      const uid = data.user_id;
+      const steps = data.steps_converted || 0;
+      
+      if (uid && steps > 0) {
+        userSteps[uid] = (userSteps[uid] || 0) + steps;
+      }
+    }
+    
+    // 2. timestamp ile sorgula (eski format desteği)
+    const snapshot2 = await db
+      .collection("activity_logs")
+      .where("activity_type", "==", activityType)
+      .where("timestamp", ">=", admin.firestore.Timestamp.fromDate(monthStart))
+      .where("timestamp", "<=", admin.firestore.Timestamp.fromDate(monthEnd))
+      .get();
+    
+    for (const doc of snapshot2.docs) {
+      if (processedDocs.has(doc.id)) continue;
+      processedDocs.add(doc.id);
+      
       const data = doc.data();
       const uid = data.user_id;
       const steps = data.steps_converted || 0;
@@ -1933,6 +1960,7 @@ async function distributeStepRewards(
 
 /**
  * Umut Elçileri ödüllerini dağıt (Bireysel bağış sıralaması)
+ * Flutter ile tutarlı: hem activity_type hem action_type, hem created_at hem timestamp
  */
 async function distributeDonationRewards(
   monthStart: Date,
@@ -1941,16 +1969,52 @@ async function distributeDonationRewards(
   rewards: number[]
 ) {
   const userDonations: Record<string, number> = {};
+  const processedDocs = new Set<string>(); // Duplicate önleme
   
-  const snapshot = await db
+  // Helper: Tarih aralığında mı kontrol et
+  const isInDateRange = (data: any): boolean => {
+    let logDate: Date | null = null;
+    if (data.created_at) {
+      logDate = data.created_at.toDate();
+    } else if (data.timestamp) {
+      logDate = data.timestamp.toDate();
+    }
+    if (!logDate) return false;
+    return logDate >= monthStart && logDate <= monthEnd;
+  };
+  
+  // 1. activity_type = 'donation' ile sorgula
+  const snapshot1 = await db
     .collection("activity_logs")
     .where("activity_type", "==", "donation")
-    .where("created_at", ">=", admin.firestore.Timestamp.fromDate(monthStart))
-    .where("created_at", "<=", admin.firestore.Timestamp.fromDate(monthEnd))
     .get();
   
-  for (const doc of snapshot.docs) {
+  for (const doc of snapshot1.docs) {
+    if (processedDocs.has(doc.id)) continue;
     const data = doc.data();
+    if (!isInDateRange(data)) continue;
+    processedDocs.add(doc.id);
+    
+    const uid = data.user_id;
+    const amount = data.amount || data.hope_amount || 0;
+    
+    if (uid && amount > 0) {
+      userDonations[uid] = (userDonations[uid] || 0) + amount;
+    }
+  }
+  
+  // 2. action_type = 'donation' ile sorgula (eski format)
+  const snapshot2 = await db
+    .collection("activity_logs")
+    .where("action_type", "==", "donation")
+    .get();
+  
+  for (const doc of snapshot2.docs) {
+    if (processedDocs.has(doc.id)) continue;
+    const data = doc.data();
+    if (!isInDateRange(data)) continue;
+    processedDocs.add(doc.id);
+    
     const uid = data.user_id;
     const amount = data.amount || data.hope_amount || 0;
     
@@ -1995,6 +2059,7 @@ async function distributeDonationRewards(
 
 /**
  * Umut Ormanı ödüllerini dağıt (Takım sıralaması)
+ * Flutter ile tutarlı: hem activity_type hem action_type, hem created_at hem timestamp
  */
 async function distributeTeamRewards(
   monthStart: Date,
@@ -2003,21 +2068,31 @@ async function distributeTeamRewards(
   rewards: number[]
 ) {
   const teamDonations: Record<string, number> = {};
+  const processedDocs = new Set<string>(); // Duplicate önleme
   
-  // Bağışları al ve kullanıcıların takımlarına göre grupla
-  const snapshot = await db
-    .collection("activity_logs")
-    .where("activity_type", "==", "donation")
-    .where("created_at", ">=", admin.firestore.Timestamp.fromDate(monthStart))
-    .where("created_at", "<=", admin.firestore.Timestamp.fromDate(monthEnd))
-    .get();
+  // Helper: Tarih aralığında mı kontrol et
+  const isInDateRange = (data: any): boolean => {
+    let logDate: Date | null = null;
+    if (data.created_at) {
+      logDate = data.created_at.toDate();
+    } else if (data.timestamp) {
+      logDate = data.timestamp.toDate();
+    }
+    if (!logDate) return false;
+    return logDate >= monthStart && logDate <= monthEnd;
+  };
   
-  for (const doc of snapshot.docs) {
+  // Helper: Bağış işle
+  const processDonation = async (doc: any) => {
+    if (processedDocs.has(doc.id)) return;
     const data = doc.data();
+    if (!isInDateRange(data)) return;
+    processedDocs.add(doc.id);
+    
     const uid = data.user_id;
     const amount = data.amount || data.hope_amount || 0;
     
-    if (!uid || amount <= 0) continue;
+    if (!uid || amount <= 0) return;
     
     // Kullanıcının takımını bul
     const userDoc = await db.collection("users").doc(uid).get();
@@ -2026,6 +2101,26 @@ async function distributeTeamRewards(
     if (teamId) {
       teamDonations[teamId] = (teamDonations[teamId] || 0) + amount;
     }
+  };
+  
+  // 1. activity_type = 'donation' ile sorgula
+  const snapshot1 = await db
+    .collection("activity_logs")
+    .where("activity_type", "==", "donation")
+    .get();
+  
+  for (const doc of snapshot1.docs) {
+    await processDonation(doc);
+  }
+  
+  // 2. action_type = 'donation' ile sorgula (eski format)
+  const snapshot2 = await db
+    .collection("activity_logs")
+    .where("action_type", "==", "donation")
+    .get();
+  
+  for (const doc of snapshot2.docs) {
+    await processDonation(doc);
   }
   
   // Sırala ve ilk 3'ü al
@@ -2160,3 +2255,14 @@ export const manualDistributeLeaderboardRewards = functions.https.onCall(
     }
   }
 );
+
+// ==================== ADMOB REKLAM GELİRİ RAPORLAMA ====================
+export { fetchAdMobRevenue, fetchAdMobRevenueManual } from "./admob-reporter";
+
+// ==================== AYLIK HOPE DEĞERİ HESAPLAMA ====================
+export { 
+  calculateMonthlyHopeValue, 
+  calculateMonthlyHopeValueManual,
+  approvePendingDonations,
+  getMonthlyHopeSummary
+} from "./monthly-hope-calculator";

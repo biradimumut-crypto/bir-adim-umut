@@ -38,6 +38,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   int _selectedIndex = 0;
   int _conversionTabIndex = 0; // 0: Günlük, 1: Taşınan
+  // ignore: unused_field
   bool _isUsingSimulatedData = true; // Health API simüle mi?
 
   // Adım verileri
@@ -47,10 +48,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _carryOverSteps = 0; // Taşınan adımlar (sadece carryover_pending)
   int _bonusSteps = 0; // Referral bonus adımları (ayrı)
   int _leaderboardBonusSteps = 0; // Sıralama ödülü bonus adımları
-  static const int _dailyGoal = 15000;
   static const int _maxConvertPerTime = 2500;
 
   // Cooldown
+  // ignore: unused_field
   bool _canConvert = true;
   int _cooldownSeconds = 0;
   Timer? _cooldownTimer;

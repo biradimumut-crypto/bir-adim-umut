@@ -14,7 +14,6 @@ import '../../models/charity_model.dart';
 import '../../providers/language_provider.dart';
 import '../../widgets/banner_ad_widget.dart';
 import '../../services/interstitial_ad_service.dart';
-import '../../widgets/success_dialog.dart';
 
 /// Bağış Sayfası - Vakıf Kartları
 class CharityScreen extends StatefulWidget {
@@ -227,29 +226,40 @@ class _CharityScreenState extends State<CharityScreen> {
 
   Widget _buildEmptyState() {
     final lang = context.read<LanguageProvider>();
-    IconData icon;
-    String message;
+    String title;
+    String subtitle;
     Color color;
+    String? iconAsset; // PNG icon path
     
     switch (_selectedTab) {
       case 0:
-        icon = Icons.business_outlined;
-        message = lang.charityNotFound;
+        iconAsset = 'assets/icons/anasayfa.png';
+        title = lang.isTurkish ? 'Yakında!' : 'Coming Soon!';
+        subtitle = lang.isTurkish 
+            ? 'Vakıflar çok yakında burada olacak.\nUmut olmak için bizi takip edin!' 
+            : 'Charities will be here very soon.\nFollow us to become Hope!';
         color = const Color(0xFF6EC6B5);
         break;
       case 1:
-        icon = Icons.groups_outlined;
-        message = lang.isTurkish ? 'Topluluk bulunamadı' : 'No community found';
+        iconAsset = 'assets/icons/takım.png';
+        title = lang.isTurkish ? 'Yakında!' : 'Coming Soon!';
+        subtitle = lang.isTurkish 
+            ? 'Topluluklar çok yakında burada olacak.\nUmut olmak için bizi takip edin!' 
+            : 'Communities will be here very soon.\nFollow us to become Hope!';
         color = const Color(0xFFE07A5F);
         break;
       case 2:
-        icon = Icons.person_outline;
-        message = lang.isTurkish ? 'Birey bulunamadı' : 'No individual found';
+        iconAsset = 'assets/icons/Profil.png';
+        title = lang.isTurkish ? 'Yakında!' : 'Coming Soon!';
+        subtitle = lang.isTurkish 
+            ? 'Bireyler çok yakında burada olacak.\nUmut olmak için bizi takip edin!' 
+            : 'Individuals will be here very soon.\nFollow us to become Hope!';
         color = const Color(0xFFF2C94C);
         break;
       default:
-        icon = Icons.search_off;
-        message = lang.charityNotFound;
+        iconAsset = null;
+        title = lang.isTurkish ? 'Yakında!' : 'Coming Soon!';
+        subtitle = '';
         color = Colors.grey;
     }
     
@@ -264,16 +274,52 @@ class _CharityScreenState extends State<CharityScreen> {
                 color: color.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 64, color: color),
+              child: iconAsset != null 
+                  ? Image.asset(iconAsset, width: 64, height: 64)
+                  : Icon(Icons.search_off, size: 64, color: color),
             ),
             const SizedBox(height: 24),
             Text(
-              message,
+              title,
               style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: color,
               ),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: color.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.notifications_active_outlined, size: 18, color: color),
+                  const SizedBox(width: 8),
+                  Text(
+                    lang.isTurkish ? 'Bildirimlerini Açık Tut' : 'Keep Notifications On',
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -676,6 +722,9 @@ class _CharityScreenState extends State<CharityScreen> {
 
       // 2. Global activity log ekle
       final logRef = firestore.collection('activity_logs').doc();
+      final now = DateTime.now();
+      final donationMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+      
       batch.set(logRef, {
         'user_id': uid,
         'user_name': _currentUser?.fullName ?? 'Anonim',
@@ -688,6 +737,9 @@ class _CharityScreenState extends State<CharityScreen> {
         'charity_logo_url': charity.imageUrl, // Vakıf logosu
         'recipient_type': charity.type.value,
         'amount': amount,
+        'hope_amount': amount,
+        'donation_month': donationMonth, // Hangi ayın bağışı
+        'donation_status': 'pending', // Beklemede - ay sonunda hesaplanacak
         'created_at': Timestamp.now(),
         'timestamp': Timestamp.now(),
       });

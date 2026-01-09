@@ -42,13 +42,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
   
   // GIF kontrolü
   final GlobalKey _gifKey = GlobalKey();
+  // ignore: unused_field
   Uint8List? _frozenGifImage;
+  // ignore: unused_field
   bool _gifFinished = false;
 
   @override
   void initState() {
     super.initState();
-    // GIF süresi kadar bekle ve son kareyi yakala
+    // GIF süresi kadar bekle
     Future.delayed(const Duration(milliseconds: 2900), () {
       _captureGifFrame();
     });
@@ -717,6 +719,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       if (result['success'] == true) {
         if (mounted) {
+          // Yeni kullanıcı ise referral dialog göster
+          if (result['isNewUser'] == true) {
+            await _showReferralDialog();
+          }
           await _navigateAfterSignUp();
         }
       } else {
@@ -747,6 +753,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       if (result['success'] == true) {
         if (mounted) {
+          // Yeni kullanıcı ise referral dialog göster
+          if (result['isNewUser'] == true) {
+            await _showReferralDialog();
+          }
           await _navigateAfterSignUp();
         }
       } else {
@@ -762,5 +772,149 @@ class _SignUpScreenState extends State<SignUpScreen> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  /// Google/Apple ile kayıt sonrası referral kodu girme dialogu
+  Future<void> _showReferralDialog() async {
+    final lang = context.read<LanguageProvider>();
+    final teamCodeController = TextEditingController();
+    final personalCodeController = TextEditingController();
+    
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6EC6B5), Color(0xFFE07A5F)],
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.card_giftcard, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                lang.isTurkish ? 'Davet Kodunuz Var mı?' : 'Have a Referral Code?',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                lang.isTurkish 
+                    ? 'Kodları girerek 100.000 bonus adım kazanabilirsiniz!'
+                    : 'Enter codes to earn 100,000 bonus steps!',
+                style: TextStyle(color: Colors.grey[600], fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              // Takım referral kodu
+              Text(
+                lang.isTurkish ? 'Takım Davet Kodu (Opsiyonel)' : 'Team Referral Code (Optional)',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: teamCodeController,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  hintText: lang.isTurkish ? 'Örn: ABC123' : 'e.g., ABC123',
+                  prefixIcon: const Icon(Icons.groups, color: Color(0xFF6EC6B5)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFF6EC6B5), width: 2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Kişisel davet kodu
+              Text(
+                lang.isTurkish ? 'Kişisel Davet Kodu (Opsiyonel)' : 'Personal Referral Code (Optional)',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: personalCodeController,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  hintText: lang.isTurkish ? 'Örn: XYZ789' : 'e.g., XYZ789',
+                  prefixIcon: const Icon(Icons.person_add, color: Color(0xFFE07A5F)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFE07A5F), width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(
+              lang.isTurkish ? 'Atla' : 'Skip',
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6EC6B5), Color(0xFFE07A5F)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: ElevatedButton(
+              onPressed: () async {
+                final teamCode = teamCodeController.text.trim();
+                final personalCode = personalCodeController.text.trim();
+                
+                if (teamCode.isNotEmpty || personalCode.isNotEmpty) {
+                  final uid = _authService.currentFirebaseUser?.uid;
+                  if (uid != null) {
+                    final result = await _authService.processReferralCodesForSocialLogin(
+                      userId: uid,
+                      teamReferralCode: teamCode.isNotEmpty ? teamCode : null,
+                      personalReferralCode: personalCode.isNotEmpty ? personalCode : null,
+                    );
+                    
+                    if (result['success'] == true && result['message'] != null && result['message'].toString().isNotEmpty) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('🎉 ${result['message']}'),
+                            backgroundColor: const Color(0xFF6EC6B5),
+                          ),
+                        );
+                      }
+                    }
+                  }
+                }
+                Navigator.pop(dialogContext);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text(lang.isTurkish ? 'Uygula' : 'Apply'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

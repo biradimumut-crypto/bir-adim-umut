@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -17,7 +18,6 @@ import 'screens/notifications/notifications_page.dart';
 import 'screens/admin/admin_panel_screen.dart';
 import 'providers/language_provider.dart';
 import 'services/notification_service.dart';
-import 'services/permission_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/local_notification_service.dart';
 import 'services/badge_service.dart';
@@ -95,8 +95,8 @@ void main() async {
     if (!kIsWeb) {
       try {
         await FirebaseAppCheck.instance.activate(
-          appleProvider: AppleProvider.debug, // Debug modda
-          androidProvider: AndroidProvider.debug, // Debug modda
+          appleProvider: AppleProvider.debug, // Debug modda - production'da deviceCheck kullan
+          androidProvider: AndroidProvider.debug, // Debug modda - production'da playIntegrity kullan
         );
         print('App Check başarıyla başlatıldı!');
       } catch (e) {
@@ -264,8 +264,27 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Şimdilik Login ekranını göster
-    // Production'da Firebase Auth state'ini kontrol et
-    return const LoginScreen();
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        // Bağlantı beklerken loading göster
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+        
+        // Kullanıcı giriş yapmışsa Dashboard'a git
+        if (snapshot.hasData && snapshot.data != null) {
+          return const DashboardScreen();
+        }
+        
+        // Giriş yapmamışsa Login ekranına git
+        return const LoginScreen();
+      },
+    );
   }
 }

@@ -176,7 +176,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
               physics: const NeverScrollableScrollPhysics(),
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
-              childAspectRatio: 1.5,
+              childAspectRatio: 1.2,
               children: [
                 // iOS
                 _buildPlatformCard(
@@ -253,7 +253,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
               physics: const NeverScrollableScrollPhysics(),
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
-              childAspectRatio: 1.5,
+              childAspectRatio: 1.2,
               children: [
                 _buildRevenueCard(
                   'Günlük Gelir',
@@ -321,7 +321,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
               physics: const NeverScrollableScrollPhysics(),
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
-              childAspectRatio: 1.2,
+              childAspectRatio: 0.9,
               children: [
                 _buildAdStatCard(
                   'Interstitial',
@@ -453,36 +453,35 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: color, size: 28),
+              child: Icon(icon, color: color, size: 24),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
                 _formatNumber(downloads),
                 style: const TextStyle(
-                  fontSize: 22,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
-            const SizedBox(height: 2),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -492,7 +491,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
               child: Text(
                 subtitle,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 9,
                   color: Colors.grey[500],
                 ),
               ),

@@ -4,7 +4,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../services/admin_service.dart';
 import '../../models/charity_model.dart';
-import '../../widgets/admin/admin_data_table.dart';
 
 /// Vakıf/Topluluk/Birey yönetimi ekranı
 class AdminCharitiesScreen extends StatefulWidget {
@@ -451,8 +450,6 @@ class _AdminCharitiesScreenState extends State<AdminCharitiesScreen>
     final emailController = TextEditingController();
     final phoneController = TextEditingController();
     final websiteController = TextEditingController();
-    final logoUrlController = TextEditingController();
-    final bannerUrlController = TextEditingController();
     RecipientType selectedType = type ?? RecipientType.charity;
     CharityCategory? selectedCategory;
     

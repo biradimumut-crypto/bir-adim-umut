@@ -63,6 +63,43 @@ class AdLogService {
     }
   }
 
+  /// Banner reklam izleme kaydı
+  /// [context]: Reklamın gösterildiği sayfa/bağlam
+  Future<void> logBannerAd({
+    String context = 'general',
+    bool wasShown = true,
+    String? errorMessage,
+  }) async {
+    try {
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) return;
+
+      final logData = {
+        'user_id': userId,
+        'ad_type': adTypeBanner,
+        'context': context,
+        'was_shown': wasShown,
+        'platform': _platform,
+        'timestamp': FieldValue.serverTimestamp(),
+        'error_message': errorMessage,
+      };
+
+      // Global ad_logs koleksiyonuna kaydet
+      await _firestore.collection('ad_logs').add(logData);
+
+      // Kullanıcının ad_logs subcollection'ına da kaydet
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('ad_logs')
+          .add(logData);
+
+      debugPrint('🖼️ Banner ad log: $context (shown: $wasShown)');
+    } catch (e) {
+      debugPrint('❌ Banner ad log error: $e');
+    }
+  }
+
   /// Rewarded (Ödüllü) reklam izleme kaydı
   /// [rewardAmount]: Verilen ödül miktarı (Hope)
   /// [rewardType]: Ödül türü (bonus_hope, extra_steps, vb.)

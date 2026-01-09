@@ -38,6 +38,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   bool _isLoading = true;
   int _selectedIndex = 0;
   int _conversionTabIndex = 0; // 0: Günlük, 1: Taşınan
+  // ignore: unused_field
   bool _isUsingSimulatedData = true; // Health API simüle mi?
 
   // Adım verileri
@@ -47,10 +48,10 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   int _carryOverSteps = 0; // Taşınan adımlar (sadece carryover_pending)
   int _bonusSteps = 0; // Referral bonus adımları (ayrı)
   int _leaderboardBonusSteps = 0; // Sıralama ödülü bonus adımları
-  static const int _dailyGoal = 15000;
   static const int _maxConvertPerTime = 2500;
 
   // Cooldown
+  // ignore: unused_field
   bool _canConvert = true;
   int _cooldownSeconds = 0;
   Timer? _cooldownTimer;
@@ -728,7 +729,6 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     required String imagePath,
     String? label,
   }) {
-    final isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () {
         setState(() => _selectedIndex = index);
@@ -763,20 +763,15 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Center(
-                    child: ColorFiltered(
-                      colorFilter: isSelected
-                          ? const ColorFilter.mode(Colors.transparent, BlendMode.multiply)
-                          : ColorFilter.mode(Colors.grey.shade400, BlendMode.modulate),
-                      child: Image.asset(
-                        imagePath,
-                        width: 32,
-                        height: 32,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) => Icon(
-                          Icons.error_outline,
-                          color: isSelected ? const Color(0xFFE07A5F) : Colors.grey,
-                          size: 24,
-                        ),
+                    child: Image.asset(
+                      imagePath,
+                      width: 32,
+                      height: 32,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.error_outline,
+                        color: Color(0xFFE07A5F),
+                        size: 24,
                       ),
                     ),
                   ),

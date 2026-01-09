@@ -39,6 +39,9 @@ class UserModel {
   final String? banReason;
   final DateTime? bannedAt;
   final String? bannedBy;
+  
+  // Auth Provider (google, apple, email)
+  final String? authProvider;
 
   UserModel({
     required this.uid,
@@ -69,6 +72,7 @@ class UserModel {
     this.banReason,
     this.bannedAt,
     this.bannedBy,
+    this.authProvider,
   });
 
   /// Firestore'dan UserModel'e dönüştür
@@ -103,6 +107,7 @@ class UserModel {
       banReason: data['ban_reason'],
       bannedAt: (data['banned_at'] as Timestamp?)?.toDate(),
       bannedBy: data['banned_by'],
+      authProvider: data['auth_provider'],
     );
   }
 
@@ -142,6 +147,7 @@ class UserModel {
       'ban_reason': banReason,
       'banned_at': bannedAt != null ? Timestamp.fromDate(bannedAt!) : null,
       'banned_by': bannedBy,
+      'auth_provider': authProvider,
     };
   }
 
@@ -175,6 +181,7 @@ class UserModel {
     String? banReason,
     DateTime? bannedAt,
     String? bannedBy,
+    String? authProvider,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -205,6 +212,7 @@ class UserModel {
       banReason: banReason ?? this.banReason,
       bannedAt: bannedAt ?? this.bannedAt,
       bannedBy: bannedBy ?? this.bannedBy,
+      authProvider: authProvider ?? this.authProvider,
     );
   }
 

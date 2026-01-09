@@ -69,6 +69,9 @@ dependencies:
   
   # Package Info - App Version Tracking
   package_info_plus: ^8.0.0
+  
+  # Native Splash Screen
+  flutter_native_splash: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -92,3 +95,23 @@ flutter:
   #       - asset: assets/fonts/CustomFont-Regular.ttf
   #       - asset: assets/fonts/CustomFont-Bold.ttf
   #         weight: 700
+
+# Native Splash Screen Configuration
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/images/nativelogo.png
+  color_dark: "#FFFFFF"
+  image_dark: assets/images/nativelogo.png
+  fullscreen: false
+  
+  android_12:
+    color: "#FFFFFF"
+    image: assets/images/nativelogo.png
+    color_dark: "#FFFFFF"
+    image_dark: assets/images/nativelogo.png
+    icon_background_color: "#FFFFFF"
+    icon_background_color_dark: "#FFFFFF"
+  
+  ios: true
+  android: true
+  web: false

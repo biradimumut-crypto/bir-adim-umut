@@ -45,6 +45,9 @@ service cloud.firestore {
       // Admin kullanıcıları güncelleyebilir (ban, bakiye vb.)
       allow update: if isAdmin();
       
+      // Admin kullanıcıyı silebilir
+      allow delete: if isAdmin();
+      
       // Referral bonus güncelleme (başka kullanıcı davet edildiğinde)
       allow update: if isAuthenticated() &&
                       request.resource.data.diff(resource.data).affectedKeys()
@@ -67,35 +70,41 @@ service cloud.firestore {
         // Bildirimi güncelle (Cloud Function tarafından)
         allow update: if isUser(userId);
         
-        // Bildirimi sil
-        allow delete: if isUser(userId);
+        // Bildirimi sil (kullanıcı veya admin)
+        allow delete: if isUser(userId) || isAdmin();
       }
       
       // ========== ACTIVITY_LOGS ALT KOLEKSİYONU ==========
       
       match /activity_logs/{logId} {
-        // Kendi aktivite geçmişini oku
-        allow read: if isUser(userId);
+        // Kendi aktivite geçmişini oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
         
         // Cloud Function tarafından oluştur
         allow create: if isAuthenticated() && userId == request.auth.uid;
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
       }
       
       // ========== ACTIVITY_LOG ALT KOLEKSİYONU (Referral bonusları için) ==========
       
       match /activity_log/{logId} {
-        // Kendi aktivite geçmişini oku
-        allow read: if isUser(userId);
+        // Kendi aktivite geçmişini oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
         
         // Referral bonusu için herhangi bir oturum açmış kullanıcı oluşturabilir
         allow create: if isAuthenticated();
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
       }
       
       // ========== BADGES ALT KOLEKSİYONU (Rozetler) ==========
       
       match /badges/{badgeId} {
-        // Kendi rozetlerini oku
-        allow read: if isUser(userId);
+        // Kendi rozetlerini oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
         
         // Rozet kazanıldığında oluştur (kendi rozetini)
         allow create: if isUser(userId);
@@ -103,51 +112,70 @@ service cloud.firestore {
         // Rozeti "görüldü" olarak işaretle
         allow update: if isUser(userId);
         
-        // Rozet silinemez (kalıcı)
-        allow delete: if false;
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
       }
       
       // ========== DAILY_STEPS ALT KOLEKSİYONU ==========
       
       match /daily_steps/{dateKey} {
-        // Kendi günlük adım verilerini oku
-        allow read: if isUser(userId);
+        // Kendi günlük adım verilerini oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
         
         // Adım verisi oluştur/güncelle
         allow write: if isUser(userId);
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
       }
       
       // ========== AD_LOGS ALT KOLEKSİYONU (Kullanıcı Reklam Geçmişi) ==========
       
       match /ad_logs/{logId} {
-        // Kendi reklam geçmişini oku
-        allow read: if isUser(userId);
+        // Kendi reklam geçmişini oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
         
         // Reklam logu oluştur
         allow create: if isUser(userId);
         
-        // Loglar güncellenemez/silinemez
-        allow update, delete: if false;
+        // Loglar güncellenemez
+        allow update: if false;
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
       }
       
       // ========== SESSIONS ALT KOLEKSİYONU (Oturum Takibi) ==========
       
       match /sessions/{sessionId} {
-        // Kendi oturumlarını oku
-        allow read: if isUser(userId);
+        // Kendi oturumlarını oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
         
         // Oturum oluştur/güncelle
         allow write: if isUser(userId);
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
       }
       
       // ========== DAILY_SESSIONS ALT KOLEKSİYONU ==========
       
       match /daily_sessions/{dateKey} {
-        // Kendi günlük oturum verilerini oku
-        allow read: if isUser(userId);
+        // Kendi günlük oturum verilerini oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
         
         // Günlük oturum verisi oluştur/güncelle
         allow write: if isUser(userId);
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
+      }
+      
+      // ========== TÜM ALT KOLEKSİYONLAR İÇİN ADMIN SİLME ==========
+      // Yukarıda tanımlanmamış herhangi bir alt koleksiyon için
+      match /{anySubcollection}/{anyDoc} {
+        allow read: if isUser(userId) || isAdmin();
+        allow delete: if isAdmin();
       }
     }
     
@@ -186,8 +214,8 @@ service cloud.firestore {
         // Lider veya üyenin kendisi güncelleyebilir
         allow update: if isTeamLeader(teamId) || isUser(userId);
         
-        // Lider üyeyi çıkarabilir
-        allow delete: if isTeamLeader(teamId);
+        // Lider veya admin üyeyi çıkarabilir
+        allow delete: if isTeamLeader(teamId) || isAdmin();
       }
     }
     
@@ -211,8 +239,11 @@ service cloud.firestore {
       // Oturum açmış kullanıcılar log oluşturabilir
       allow create: if isAuthenticated();
       
-      // Loglar güncellenemez/silinemez
-      allow update, delete: if false;
+      // Sadece admin güncelleyebilir (bağış transfer durumu için)
+      allow update: if isAdmin();
+      
+      // Loglar silinemez
+      allow delete: if false;
     }
     
     // ========== NOTIFICATIONS ROOT KOLEKSİYONU (Takım davetleri için) ==========
@@ -321,6 +352,19 @@ service cloud.firestore {
       allow delete: if false;
     }
     
+    // ========== SCHEDULED_NOTIFICATIONS KOLEKSİYONU ==========
+    
+    match /scheduled_notifications/{notificationId} {
+      // Admin okuyabilir
+      allow read: if isAdmin();
+      
+      // Admin oluşturabilir/güncelleyebilir
+      allow create, update: if isAdmin();
+      
+      // Admin silebilir
+      allow delete: if isAdmin();
+    }
+    
     // ========== DAILY_STATS KOLEKSİYONU ==========
     
     match /daily_stats/{dateKey} {
@@ -387,9 +431,8 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                        request.resource.data.user_id == request.auth.uid;
       
-      // Kendi yorumunu silebilir
-      allow delete: if isAuthenticated() && 
-                       resource.data.user_id == request.auth.uid;
+      // Kendi yorumunu silebilir veya admin silebilir
+      allow delete: if (isAuthenticated() && resource.data.user_id == request.auth.uid) || isAdmin();
     }
     
     // ========== HOPE_LEADERBOARD KOLEKSİYONU ==========
@@ -433,6 +476,26 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       
       // Sadece admin güncelleyebilir
+      allow write: if isAdmin();
+    }
+    
+    // ========== MONTHLY_HOPE_VALUE KOLEKSİYONU ==========
+    
+    match /monthly_hope_value/{monthKey} {
+      // Sadece admin okuyabilir (kullanıcılar görmemeli)
+      allow read: if isAdmin();
+      
+      // Cloud Function tarafından yazılır, admin güncelleyebilir
+      allow write: if isAdmin();
+    }
+    
+    // ========== AD_REVENUE_HISTORY KOLEKSİYONU ==========
+    
+    match /ad_revenue_history/{docId} {
+      // Sadece admin okuyabilir
+      allow read: if isAdmin();
+      
+      // Cloud Function tarafından yazılır
       allow write: if isAdmin();
     }
     

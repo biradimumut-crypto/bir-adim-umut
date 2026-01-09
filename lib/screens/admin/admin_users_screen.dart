@@ -221,6 +221,14 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                         constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                         padding: EdgeInsets.zero,
                       ),
+                      IconButton(
+                        onPressed: () => _showDeleteConfirmDialog(user),
+                        icon: const Icon(Icons.delete_forever, size: 20),
+                        tooltip: 'Kullanıcıyı Sil',
+                        color: Colors.red.shade900,
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                        padding: EdgeInsets.zero,
+                      ),
                     ],
                   ),
                 ],
@@ -409,15 +417,126 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     }
   }
 
+  void _showDeleteConfirmDialog(UserModel user) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 28),
+            const SizedBox(width: 8),
+            const Text('Kullanıcıyı Sil'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${user.fullName} kullanıcısını silmek istediğinize emin misiniz?',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text(
+                    '⚠️ Bu işlem geri alınamaz!',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                  ),
+                  SizedBox(height: 8),
+                  Text('Silinecek veriler:', style: TextStyle(fontWeight: FontWeight.w600)),
+                  Text('• Kullanıcı profili'),
+                  Text('• Tüm Hope bakiyesi'),
+                  Text('• Adım geçmişi'),
+                  Text('• Aktivite logları'),
+                  Text('• Rozetler'),
+                  Text('• Yorumlar'),
+                  Text('• Takım üyeliği'),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await _deleteUser(user);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Kalıcı Olarak Sil'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteUser(UserModel user) async {
+    try {
+      // Loading göster
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+      
+      await _adminService.deleteUser(user.uid, user.fullName);
+      
+      // Loading kapat
+      if (mounted) Navigator.pop(context);
+      
+      _loadUsers();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${user.fullName} silindi'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      // Loading kapat
+      if (mounted) Navigator.pop(context);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _showEditBalanceDialog(UserModel user) {
     final balanceController = TextEditingController(
       text: user.walletBalanceHope.toString(),
     );
     final reasonController = TextEditingController();
+    final scaffoldMessenger = ScaffoldMessenger.of(context); // Context'i önceden kaydet
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Bakiye Düzenle'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -442,23 +561,27 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('İptal'),
           ),
           ElevatedButton(
             onPressed: () async {
               final newBalance = double.tryParse(balanceController.text);
               if (newBalance != null) {
-                Navigator.pop(context);
-                await _adminService.updateUserBalance(
-                  user.uid,
-                  newBalance,
-                  reasonController.text,
-                );
-                _loadUsers();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                Navigator.pop(dialogContext);
+                try {
+                  await _adminService.updateUserBalance(
+                    user.uid,
+                    newBalance,
+                    reasonController.text,
+                  );
+                  _loadUsers();
+                  scaffoldMessenger.showSnackBar(
                     const SnackBar(content: Text('Bakiye güncellendi')),
+                  );
+                } catch (e) {
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
                   );
                 }
               }

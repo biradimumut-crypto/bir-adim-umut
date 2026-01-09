@@ -169,21 +169,20 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                     ),
                   ],
                 ),
-                Flexible(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.person, size: 12, color: Colors.grey[400]),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          adminUid,
-                          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.person, size: 12, color: Colors.grey[400]),
+                    const SizedBox(width: 4),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 150),
+                      child: Text(
+                        adminUid,
+                        style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ],
             ),
