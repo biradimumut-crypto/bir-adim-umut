@@ -50,3 +50,4 @@ lib/generated/
 android/key.properties
 android/app/*.jks
 *.jks
+serviceAccountKey.json
