@@ -643,6 +643,36 @@ export const carryOverDailySteps = functions.pubsub
                 last_carryover_update: admin.firestore.FieldValue.serverTimestamp(),
               });
 
+              // 📝 Aktivite geçmişine kayıt ekle
+              try {
+                const now = new Date();
+                const carryoverTimestamp = admin.firestore.Timestamp.fromDate(now);
+                
+                // Global activity_logs'a ekle (profil ekranı için)
+                await db.collection("activity_logs").add({
+                  user_id: userDoc.id,
+                  activity_type: "step_carryover",
+                  steps: unconvertedSteps,
+                  from_date: yesterdayKey,
+                  created_at: carryoverTimestamp,
+                  timestamp: carryoverTimestamp,
+                });
+
+                // User subcollection'a da ekle
+                await db.collection("users").doc(userDoc.id).collection("activity_logs").add({
+                  user_id: userDoc.id,
+                  activity_type: "step_carryover",
+                  steps: unconvertedSteps,
+                  from_date: yesterdayKey,
+                  created_at: carryoverTimestamp,
+                  timestamp: carryoverTimestamp,
+                });
+                
+                console.log(`📝 ${userDoc.id}: activity_log eklendi`);
+              } catch (logError) {
+                console.error(`⚠️ ${userDoc.id}: activity_log eklenemedi:`, logError);
+              }
+
               carryOverCount++;
               totalCarriedSteps += unconvertedSteps;
 
@@ -1578,6 +1608,38 @@ export const resetMonthlyCarryoverSteps = functions.pubsub
 
           // Log koleksiyonuna kaydet
           await db.collection("monthly_reset_logs").add(monthEndLog);
+
+          // 📝 Aktivite geçmişine silinen adımları kaydet (sadece > 0 ise)
+          if (expiredSteps > 0) {
+            const expiredTimestamp = admin.firestore.FieldValue.serverTimestamp();
+            const currentDate = new Date();
+            const lastMonth = currentDate.getMonth() === 0 ? 12 : currentDate.getMonth(); // 0=Ocak
+            const lastMonthYear = currentDate.getMonth() === 0 ? currentDate.getFullYear() - 1 : currentDate.getFullYear();
+            
+            // Global activity_logs'a ekle
+            await db.collection("activity_logs").add({
+              user_id: userDoc.id,
+              activity_type: "steps_expired",
+              steps: expiredSteps,
+              month: lastMonth,
+              year: lastMonthYear,
+              created_at: expiredTimestamp,
+              timestamp: expiredTimestamp,
+            });
+
+            // User subcollection'a da ekle
+            await db.collection("users").doc(userDoc.id).collection("activity_logs").add({
+              user_id: userDoc.id,
+              activity_type: "steps_expired",
+              steps: expiredSteps,
+              month: lastMonth,
+              year: lastMonthYear,
+              created_at: expiredTimestamp,
+              timestamp: expiredTimestamp,
+            });
+            
+            console.log(`📝 ${userDoc.id}: ${expiredSteps} adım silindi logu eklendi`);
+          }
 
           // Kullanıcının carryover değerlerini sıfırla
           batch.update(userDoc.ref, {

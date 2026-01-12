@@ -80,8 +80,8 @@ service cloud.firestore {
         // Kendi aktivite geçmişini oku veya Admin okuyabilir
         allow read: if isUser(userId) || isAdmin();
         
-        // Cloud Function tarafından oluştur
-        allow create: if isAuthenticated() && userId == request.auth.uid;
+        // Kendi aktivite logunu oluştur VEYA referral bonus logu oluştur (başka kullanıcı için)
+        allow create: if isAuthenticated();
         
         // Admin silebilir (kullanıcı silme için)
         allow delete: if isAdmin();
@@ -214,8 +214,8 @@ service cloud.firestore {
         // Lider veya üyenin kendisi güncelleyebilir
         allow update: if isTeamLeader(teamId) || isUser(userId);
         
-        // Lider veya admin üyeyi çıkarabilir
-        allow delete: if isTeamLeader(teamId) || isAdmin();
+        // Lider, admin veya üyenin kendisi çıkabilir (takımdan ayrılma)
+        allow delete: if isTeamLeader(teamId) || isAdmin() || isUser(userId);
       }
     }
     

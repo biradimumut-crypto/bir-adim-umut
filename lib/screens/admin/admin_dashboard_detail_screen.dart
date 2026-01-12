@@ -713,20 +713,68 @@ class _AdminDashboardDetailScreenState extends State<AdminDashboardDetailScreen>
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundColor: _getThemeColor().withOpacity(0.2),
-              child: const Icon(Icons.person_add, size: 18, color: Color(0xFFF2C94C)),
+              backgroundColor: record.isTeamPool 
+                  ? const Color(0xFF3498DB).withOpacity(0.2)
+                  : record.isTeamReferral 
+                      ? const Color(0xFF6EC6B5).withOpacity(0.2)
+                      : _getThemeColor().withOpacity(0.2),
+              child: Icon(
+                record.isTeamPool ? Icons.groups : (record.isTeamReferral ? Icons.group_add : Icons.person_add), 
+                size: 18, 
+                color: record.isTeamPool 
+                    ? const Color(0xFF3498DB) 
+                    : (record.isTeamReferral ? const Color(0xFF6EC6B5) : const Color(0xFFF2C94C)),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    record.referrerUsername,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          record.referrerUsername,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (record.isTeamPool) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3498DB).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Havuz',
+                            style: TextStyle(fontSize: 9, color: Color(0xFF3498DB), fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ] else if (record.isTeamReferral) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6EC6B5).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Takım',
+                            style: TextStyle(fontSize: 9, color: Color(0xFF6EC6B5), fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   Text(
-                    'Davet: ${record.referredUsername}',
+                    record.isTeamPool 
+                        ? 'Yeni Üye: ${record.referredUsername}'
+                        : record.isTeamReferral 
+                            ? 'Yeni Üye: ${record.referredUsername}'
+                            : 'Davet: ${record.referredUsername}',
                     style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                   ),
                 ],
@@ -739,7 +787,9 @@ class _AdminDashboardDetailScreenState extends State<AdminDashboardDetailScreen>
                   '+${_formatNumber(record.bonusStepsGiven)} adım',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: _getThemeColor(),
+                    color: record.isTeamPool 
+                        ? const Color(0xFF3498DB) 
+                        : (record.isTeamReferral ? const Color(0xFF6EC6B5) : _getThemeColor()),
                     fontSize: 14,
                   ),
                 ),

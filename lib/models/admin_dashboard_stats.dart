@@ -185,6 +185,8 @@ class ReferralRecord {
   final int bonusStepsGiven;
   final int bonusStepsUsed;
   final DateTime referralDate;
+  final bool isTeamReferral;
+  final bool isTeamPool;
 
   ReferralRecord({
     required this.referrerId,
@@ -194,6 +196,8 @@ class ReferralRecord {
     required this.bonusStepsGiven,
     required this.bonusStepsUsed,
     required this.referralDate,
+    this.isTeamReferral = false,
+    this.isTeamPool = false,
   });
 }
 

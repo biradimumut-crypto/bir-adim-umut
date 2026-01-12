@@ -89,6 +89,9 @@ class StepConversionService {
         final carryoverPending = userData['carryover_pending'] ?? 0;
         if (carryoverPending > 0) {
           totalCarryOver += (carryoverPending is int) ? carryoverPending : (carryoverPending as num).toInt();
+          
+          // Eğer bugün için step_carryover logu yoksa otomatik ekle
+          await _ensureCarryoverLogExists(userId, totalCarryOver);
         }
       }
     } catch (e) {
@@ -96,6 +99,55 @@ class StepConversionService {
     }
 
     return totalCarryOver;
+  }
+  
+  /// Bugün için step_carryover logu yoksa ekle (Cloud Function bazen log ekleyemeyebilir)
+  Future<void> _ensureCarryoverLogExists(String userId, int carryoverAmount) async {
+    try {
+      print('🔍 Carryover log kontrolü: userId=$userId, amount=$carryoverAmount');
+      
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      
+      // Bugün için step_carryover logu var mı kontrol et (basit sorgu - index gerektirmez)
+      final allCarryoverLogs = await _firestore
+          .collection('activity_logs')
+          .where('user_id', isEqualTo: userId)
+          .where('activity_type', isEqualTo: 'step_carryover')
+          .get();
+      
+      // Client-side filtreleme - bugün mü?
+      final todayLogs = allCarryoverLogs.docs.where((doc) {
+        final data = doc.data();
+        final createdAt = data['created_at'] as Timestamp?;
+        if (createdAt == null) return false;
+        return createdAt.toDate().isAfter(todayStart);
+      }).toList();
+      
+      print('🔍 Bugünkü log sayısı: ${todayLogs.length}');
+      
+      if (todayLogs.isEmpty) {
+        // Log yok, ekle
+        final yesterday = DateTime(now.year, now.month, now.day - 1);
+        final yesterdayKey = '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+        final timestamp = Timestamp.now();
+        
+        await _firestore.collection('activity_logs').add({
+          'user_id': userId,
+          'activity_type': 'step_carryover',
+          'steps': carryoverAmount,
+          'from_date': yesterdayKey,
+          'created_at': timestamp,
+          'timestamp': timestamp,
+        });
+        
+        print('✅ step_carryover logu eklendi: $carryoverAmount adım');
+      } else {
+        print('ℹ️ step_carryover logu zaten var');
+      }
+    } catch (e) {
+      print('❌ Carryover log kontrolü hatası: $e');
+    }
   }
   
   /// Referral bonus adımlarını al (süresiz geçerli, ayrı tutulur)
@@ -166,14 +218,30 @@ class StepConversionService {
       });
 
       // Activity log ekle
+      final now = Timestamp.now();
+      
+      // Global
       final logRef = _firestore.collection('activity_logs').doc();
       batch.set(logRef, {
         'user_id': userId,
         'activity_type': 'carryover_conversion',
         'steps_converted': steps,
         'hope_earned': hopeEarned,
-        'is_bonus': false, // Carryover normal oran ile dönüştürülür
-        'created_at': Timestamp.now(),
+        'is_bonus': false,
+        'created_at': now,
+        'timestamp': now,
+      });
+      
+      // User subcollection
+      final userLogRef = _firestore.collection('users').doc(userId).collection('activity_logs').doc();
+      batch.set(userLogRef, {
+        'user_id': userId,
+        'activity_type': 'carryover_conversion',
+        'steps_converted': steps,
+        'hope_earned': hopeEarned,
+        'is_bonus': false,
+        'created_at': now,
+        'timestamp': now,
       });
 
       await batch.commit();
@@ -233,15 +301,32 @@ class StepConversionService {
       });
 
       // Activity log ekle
+      final now = Timestamp.now();
+      
+      // Global
       final logRef = _firestore.collection('activity_logs').doc();
       batch.set(logRef, {
         'user_id': userId,
         'activity_type': 'bonus_conversion',
         'steps_converted': steps,
         'hope_earned': hopeEarned,
-        'is_bonus': false, // Referral bonus adımlar normal oran ile dönüştürülür (2x değil)
-        'is_referral_bonus': true, // Referral bonus olduğunu belirt
-        'created_at': Timestamp.now(),
+        'is_bonus': false,
+        'is_referral_bonus': true,
+        'created_at': now,
+        'timestamp': now,
+      });
+      
+      // User subcollection
+      final userLogRef = _firestore.collection('users').doc(userId).collection('activity_logs').doc();
+      batch.set(userLogRef, {
+        'user_id': userId,
+        'activity_type': 'bonus_conversion',
+        'steps_converted': steps,
+        'hope_earned': hopeEarned,
+        'is_bonus': false,
+        'is_referral_bonus': true,
+        'created_at': now,
+        'timestamp': now,
       });
 
       await batch.commit();
@@ -367,6 +452,9 @@ class StepConversionService {
       });
 
       // 3. Activity log ekle - 2x bonus bilgisi dahil
+      final now = Timestamp.now();
+      
+      // Global activity_logs
       final logRef = _firestore.collection('activity_logs').doc();
       batch.set(logRef, {
         'user_id': userId,
@@ -374,7 +462,20 @@ class StepConversionService {
         'steps_converted': steps,
         'hope_earned': hopeEarned,
         'is_bonus': isBonus,
-        'created_at': Timestamp.now(),
+        'created_at': now,
+        'timestamp': now,
+      });
+      
+      // User subcollection activity_logs
+      final userLogRef = _firestore.collection('users').doc(userId).collection('activity_logs').doc();
+      batch.set(userLogRef, {
+        'user_id': userId,
+        'activity_type': isBonus ? 'step_conversion_2x' : 'step_conversion',
+        'steps_converted': steps,
+        'hope_earned': hopeEarned,
+        'is_bonus': isBonus,
+        'created_at': now,
+        'timestamp': now,
       });
 
       await batch.commit();
@@ -593,15 +694,32 @@ class StepConversionService {
       });
 
       // Activity log ekle
+      final now = Timestamp.now();
+      
+      // Global
       final logRef = _firestore.collection('activity_logs').doc();
       batch.set(logRef, {
         'user_id': userId,
         'activity_type': 'leaderboard_bonus_conversion',
         'steps_converted': steps,
         'hope_earned': hopeEarned,
-        'is_bonus': false, // Normal oran ile dönüştürülür
+        'is_bonus': false,
         'is_leaderboard_bonus': true,
-        'created_at': Timestamp.now(),
+        'created_at': now,
+        'timestamp': now,
+      });
+      
+      // User subcollection
+      final userLogRef = _firestore.collection('users').doc(userId).collection('activity_logs').doc();
+      batch.set(userLogRef, {
+        'user_id': userId,
+        'activity_type': 'leaderboard_bonus_conversion',
+        'steps_converted': steps,
+        'hope_earned': hopeEarned,
+        'is_bonus': false,
+        'is_leaderboard_bonus': true,
+        'created_at': now,
+        'timestamp': now,
       });
 
       await batch.commit();
@@ -687,6 +805,9 @@ class StepConversionService {
       });
 
       // Activity log ekle
+      final now = Timestamp.now();
+      
+      // Global
       final logRef = _firestore.collection('activity_logs').doc();
       batch.set(logRef, {
         'user_id': userId,
@@ -696,7 +817,22 @@ class StepConversionService {
         'hope_earned': hopeEarned,
         'is_bonus': false,
         'is_team_bonus': true,
-        'created_at': Timestamp.now(),
+        'created_at': now,
+        'timestamp': now,
+      });
+      
+      // User subcollection
+      final userLogRef = _firestore.collection('users').doc(userId).collection('activity_logs').doc();
+      batch.set(userLogRef, {
+        'user_id': userId,
+        'team_id': teamId,
+        'activity_type': 'team_bonus_conversion',
+        'steps_converted': steps,
+        'hope_earned': hopeEarned,
+        'is_bonus': false,
+        'is_team_bonus': true,
+        'created_at': now,
+        'timestamp': now,
       });
 
       await batch.commit();

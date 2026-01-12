@@ -138,6 +138,7 @@ class AdLogService {
 
       // Eğer ödül verilmişse, activity_logs'a da kaydet
       if (wasCompleted && rewardAmount > 0) {
+        // Global activity_logs
         await _firestore.collection('activity_logs').add({
           'user_id': userId,
           'activity_type': 'reward_ad_bonus',
@@ -145,6 +146,18 @@ class AdLogService {
           'context': context,
           'platform': _platform,
           'created_at': FieldValue.serverTimestamp(),
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+        
+        // User subcollection activity_logs
+        await _firestore.collection('users').doc(userId).collection('activity_logs').add({
+          'user_id': userId,
+          'activity_type': 'reward_ad_bonus',
+          'amount': rewardAmount.toDouble(),
+          'context': context,
+          'platform': _platform,
+          'created_at': FieldValue.serverTimestamp(),
+          'timestamp': FieldValue.serverTimestamp(),
         });
       }
 

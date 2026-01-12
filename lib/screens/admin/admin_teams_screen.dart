@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/admin_service.dart';
@@ -18,6 +19,10 @@ class _AdminTeamsScreenState extends State<AdminTeamsScreen> {
   
   List<TeamModel> _teams = [];
   bool _isLoading = true;
+  
+  // Debounce için timer
+  Timer? _debounceTimer;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -28,7 +33,22 @@ class _AdminTeamsScreenState extends State<AdminTeamsScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
+  }
+  
+  void _onSearchChanged(String query) {
+    // Önceki timer'ı iptal et
+    _debounceTimer?.cancel();
+    
+    // 300ms bekle, sonra filtrelemeyi uygula
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _searchQuery = query;
+        });
+      }
+    });
   }
 
   Future<void> _loadTeams() async {
@@ -79,9 +99,7 @@ class _AdminTeamsScreenState extends State<AdminTeamsScreen> {
         AdminSearchBar(
           controller: _searchController,
           hintText: 'Takım adı ile ara...',
-          onChanged: (query) {
-            setState(() {});
-          },
+          onChanged: _onSearchChanged,
         ),
         
         // Takım Listesi
@@ -90,14 +108,19 @@ class _AdminTeamsScreenState extends State<AdminTeamsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _teams.isEmpty
-                    ? const Center(
+                : _filteredTeams.isEmpty
+                    ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.group_off, size: 64, color: Colors.grey),
-                            SizedBox(height: 16),
-                            Text('Takım bulunamadı', style: TextStyle(color: Colors.grey)),
+                            const SizedBox(height: 16),
+                            Text(
+                              _searchQuery.isEmpty 
+                                ? 'Takım bulunamadı' 
+                                : '"$_searchQuery" için sonuç yok',
+                              style: const TextStyle(color: Colors.grey),
+                            ),
                           ],
                         ),
                       )
@@ -115,9 +138,9 @@ class _AdminTeamsScreenState extends State<AdminTeamsScreen> {
   }
 
   List<TeamModel> get _filteredTeams {
-    if (_searchController.text.isEmpty) return _teams;
+    if (_searchQuery.isEmpty) return _teams;
     return _teams.where((team) =>
-        team.name.toLowerCase().contains(_searchController.text.toLowerCase())
+        team.name.toLowerCase().contains(_searchQuery.toLowerCase())
     ).toList();
   }
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/admin_service.dart';
 import '../../models/admin_stats_model.dart';
 
@@ -100,21 +99,30 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
           ElevatedButton(
             onPressed: () async {
               try {
-                await FirebaseFirestore.instance.collection('admin_stats').doc('current').set({
-                  'ios_downloads': int.tryParse(iosController.text) ?? 0,
-                  'android_downloads': int.tryParse(androidController.text) ?? 0,
-                  'ad_revenue': double.tryParse(adRevenueController.text) ?? 0,
-                  'updated_at': FieldValue.serverTimestamp(),
-                }, SetOptions(merge: true));
+                final newIos = int.tryParse(iosController.text) ?? 0;
+                final newAndroid = int.tryParse(androidController.text) ?? 0;
+                final newAdRevenue = double.tryParse(adRevenueController.text) ?? 0;
+                
+                // AdminService kullanarak güncelle (log kaydı otomatik eklenir)
+                final success = await _adminService.updateAdminStats(
+                  iosDownloads: newIos,
+                  androidDownloads: newAndroid,
+                  adRevenue: newAdRevenue,
+                  previousIosDownloads: _stats?.iosDownloads,
+                  previousAndroidDownloads: _stats?.androidDownloads,
+                  previousAdRevenue: _stats?.adRevenue,
+                );
                 
                 Navigator.pop(context);
                 _loadStats();
                 
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('İstatistikler güncellendi ✅'),
-                      backgroundColor: Colors.green,
+                    SnackBar(
+                      content: Text(success 
+                        ? 'İstatistikler güncellendi ve loglandı ✅' 
+                        : 'Güncelleme başarısız'),
+                      backgroundColor: success ? Colors.green : Colors.red,
                     ),
                   );
                 }
@@ -278,7 +286,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
             
             const SizedBox(height: 12),
             
-            // Reklam türleri
+            // Reklam türleri - Dinamik oranlar (ad_logs'tan hesaplanan)
             Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               child: Padding(
@@ -286,16 +294,66 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Reklam Türleri Bazında Gelir',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    Row(
+                      children: [
+                        const Text(
+                          'Reklam Türleri Bazında Dağılım',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: 'ad_logs koleksiyonundaki gerçek verilere göre hesaplanır',
+                          child: Icon(Icons.info_outline, size: 16, color: Colors.grey[500]),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
-                    _buildAdTypeRow('Ödüllü Reklamlar', 0.65, Colors.green),
-                    const SizedBox(height: 10),
-                    _buildAdTypeRow('Geçiş Reklamları', 0.25, Colors.blue),
-                    const SizedBox(height: 10),
-                    _buildAdTypeRow('Banner Reklamlar', 0.10, Colors.orange),
+                    Builder(
+                      builder: (context) {
+                        // Toplam gösterim sayısı
+                        final totalAds = (_stats?.totalInterstitialAds ?? 0) + (_stats?.totalRewardedAds ?? 0);
+                        
+                        // Oranları hesapla (0 bölme hatası kontrolü)
+                        final rewardedRatio = totalAds > 0 
+                            ? (_stats?.totalRewardedAds ?? 0) / totalAds 
+                            : 0.65; // Varsayılan
+                        final interstitialRatio = totalAds > 0 
+                            ? (_stats?.totalInterstitialAds ?? 0) / totalAds 
+                            : 0.25; // Varsayılan
+                        
+                        // Not: Banner reklamları henüz ad_logs'ta izlenmiyor
+                        // Gösterim için %10 varsayılan değer kullanılıyor
+                        const bannerRatio = 0.10;
+                        
+                        // Oranları normalize et (toplam 1 olsun)
+                        final normalizedTotal = rewardedRatio + interstitialRatio + bannerRatio;
+                        final finalRewardedRatio = rewardedRatio / normalizedTotal;
+                        final finalInterstitialRatio = interstitialRatio / normalizedTotal;
+                        final finalBannerRatio = bannerRatio / normalizedTotal;
+                        
+                        return Column(
+                          children: [
+                            _buildAdTypeRow(
+                              'Ödüllü Reklamlar (${_stats?.totalRewardedAds ?? 0} gösterim)', 
+                              finalRewardedRatio, 
+                              Colors.green,
+                            ),
+                            const SizedBox(height: 10),
+                            _buildAdTypeRow(
+                              'Geçiş Reklamları (${_stats?.totalInterstitialAds ?? 0} gösterim)', 
+                              finalInterstitialRatio, 
+                              Colors.blue,
+                            ),
+                            const SizedBox(height: 10),
+                            _buildAdTypeRow(
+                              'Banner Reklamlar', 
+                              finalBannerRatio, 
+                              Colors.orange,
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),

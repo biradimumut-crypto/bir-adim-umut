@@ -97,6 +97,8 @@ class AuthService {
       // 2. Takım referral code varsa takımı bul
       String? targetTeamId;
       if (referralCode != null && referralCode.isNotEmpty) {
+        print('🔍 Takım referral kodu aranıyor: ${referralCode.toUpperCase()}');
+        
         final teamQuery = await _firestore
             .collection('teams')
             .where('referral_code', isEqualTo: referralCode.toUpperCase())
@@ -105,12 +107,17 @@ class AuthService {
 
         if (teamQuery.docs.isNotEmpty) {
           targetTeamId = teamQuery.docs[0].id;
+          print('✅ Takım bulundu: $targetTeamId');
+        } else {
+          print('❌ Takım bulunamadı: ${referralCode.toUpperCase()}');
         }
       }
 
       // 3. Kişisel referral code varsa davet edeni bul
       String? referrerUserId;
       if (personalReferralCode != null && personalReferralCode.isNotEmpty) {
+        print('🔍 Kişisel referral kodu aranıyor: ${personalReferralCode.toUpperCase()}');
+        
         final referrerQuery = await _firestore
             .collection('users')
             .where('personal_referral_code', isEqualTo: personalReferralCode.toUpperCase())
@@ -119,6 +126,9 @@ class AuthService {
 
         if (referrerQuery.docs.isNotEmpty) {
           referrerUserId = referrerQuery.docs.first.id;
+          print('✅ Davet eden bulundu: $referrerUserId');
+        } else {
+          print('❌ Kişisel referral kodu bulunamadı: ${personalReferralCode.toUpperCase()}');
         }
       }
 
@@ -184,26 +194,72 @@ class AuthService {
         });
         
         // Activity log ekle - Takım referral bonusu
+        final now = Timestamp.now();
+        
+        // Global
         await _firestore.collection('activity_logs').add({
           'user_id': userId,
           'team_id': targetTeamId,
           'activity_type': 'team_referral_bonus',
           'bonus_steps': teamReferralBonus,
-          'created_at': Timestamp.now(),
+          'created_at': now,
+          'timestamp': now,
         });
+        
+        // User subcollection
+        await _firestore.collection('users').doc(userId).collection('activity_logs').add({
+          'user_id': userId,
+          'team_id': targetTeamId,
+          'activity_type': 'team_referral_bonus',
+          'bonus_steps': teamReferralBonus,
+          'created_at': now,
+          'timestamp': now,
+        });
+        
+        // 🎁 TAKIMA BONUS ADIM EKLE (takım havuzuna)
+        final teamOwnerId = teamData?['leader_uid'] ?? teamData?['created_by'];
+        await _firestore.collection('teams').doc(targetTeamId).update({
+          'total_team_steps': FieldValue.increment(teamReferralBonus),
+          'referral_bonus_steps': FieldValue.increment(teamReferralBonus),
+        });
+        
+        // Takım için activity log (takım ID ile)
+        await _firestore.collection('activity_logs').add({
+          'team_id': targetTeamId,
+          'activity_type': 'team_referral_bonus',
+          'bonus_steps': teamReferralBonus,
+          'new_member_id': userId,
+          'new_member_name': fullName,
+          'created_at': now,
+          'timestamp': now,
+          'is_team_bonus': true,
+        });
+        
+        print('✅ Takıma bonus eklendi: $targetTeamId (+$teamReferralBonus adım)');
       }
 
       // 7. Kişisel referral varsa, her iki tarafa 100.000 carry-over adım ekle
       if (referrerUserId != null) {
+        print('✅ Kişisel referral bonusu ekleniyor: Davet eden=$referrerUserId, Yeni üye=$userId');
+        
         final referralBonus = 100000; // 100.000 adım
         final today = DateTime.now();
         final dateStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
+        // Davet edenin adını al
+        String? referrerName;
+        try {
+          final referrerDoc = await _firestore.collection('users').doc(referrerUserId).get();
+          referrerName = referrerDoc.data()?['full_name'] as String?;
+        } catch (e) {
+          print('Davet eden adı alınamadı: $e');
+        }
 
         // Davet eden kullanıcıya bonus ekle
         await _addReferralBonusSteps(referrerUserId, referralBonus, dateStr, userId, fullName);
         
         // Davet edilen (yeni kullanıcı) kullanıcıya bonus ekle
-        await _addReferralBonusSteps(userId, referralBonus, dateStr, referrerUserId, null);
+        await _addReferralBonusSteps(userId, referralBonus, dateStr, referrerUserId, referrerName);
 
         // Davet edenin referral_count'unu artır
         await _firestore.collection('users').doc(referrerUserId).update({
@@ -261,12 +317,28 @@ class AuthService {
     });
 
     // Activity log ekle
-    await _firestore.collection('users').doc(userId).collection('activity_log').add({
-      'type': 'referral_bonus',
-      'timestamp': Timestamp.now(),
+    final now = Timestamp.now();
+    
+    // User subcollection
+    await _firestore.collection('users').doc(userId).collection('activity_logs').add({
+      'user_id': userId,
+      'activity_type': 'referral_bonus',
       'bonus_steps': bonusSteps,
       'other_user_id': otherUserId,
       'other_user_name': otherUserName,
+      'created_at': now,
+      'timestamp': now,
+    });
+    
+    // Global activity_logs
+    await _firestore.collection('activity_logs').add({
+      'user_id': userId,
+      'activity_type': 'referral_bonus',
+      'bonus_steps': bonusSteps,
+      'other_user_id': otherUserId,
+      'other_user_name': otherUserName,
+      'created_at': now,
+      'timestamp': now,
     });
   }
 

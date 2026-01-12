@@ -78,8 +78,13 @@ class UserModel {
   /// Firestore'dan UserModel'e dönüştür
   factory UserModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
+    return UserModel.fromMap(data, doc.id);
+  }
+
+  /// Map'ten UserModel'e dönüştür (stream için)
+  factory UserModel.fromMap(Map<String, dynamic> data, String uid) {
     return UserModel(
-      uid: doc.id,
+      uid: uid,
       fullName: data['full_name'] ?? '',
       maskedName: data['masked_name'],
       nickname: data['nickname'],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -1690,40 +1691,68 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFFE07A5F).withOpacity(0.1),
-                    const Color(0xFFF2C94C).withOpacity(0.1),
+            GestureDetector(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: referralCode));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(lang.isTurkish ? 'Kod kopyalandı!' : 'Code copied!'),
+                    backgroundColor: const Color(0xFF6EC6B5),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFE07A5F).withOpacity(0.1),
+                      const Color(0xFFF2C94C).withOpacity(0.1),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE07A5F).withOpacity(0.3)),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          referralCode,
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFE07A5F),
+                            letterSpacing: 4,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(Icons.copy, color: Colors.grey[400], size: 20),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      lang.isTurkish 
+                          ? '$referralCount kişi davet ettiniz'
+                          : 'You invited $referralCount people',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      lang.isTurkish ? 'Kopyalamak için dokun' : 'Tap to copy',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[400],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE07A5F).withOpacity(0.3)),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    referralCode,
-                    style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFE07A5F),
-                      letterSpacing: 4,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    lang.isTurkish 
-                        ? '$referralCount kişi davet ettiniz'
-                        : 'You invited $referralCount people',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
               ),
             ),
             const SizedBox(height: 16),
@@ -1757,22 +1786,6 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(lang.isTurkish ? 'Kapat' : 'Close'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              final shareText = lang.isTurkish 
-                  ? 'OneHopeStep uygulamasına katıl ve adımlarınla umut ol! 🚶‍♂️💚\n\nDavet kodum: $referralCode\n\nKayıt olurken bu kodu gir, ikiniz de 100.000 bonus adım kazanın!'
-                  : 'Join OneHopeStep and be hope with your steps! 🚶‍♂️💚\n\nMy invite code: $referralCode\n\nEnter this code when signing up, both of you get 100,000 bonus steps!';
-              
-              Share.share(shareText);
-            },
-            icon: const Icon(Icons.share, size: 18),
-            label: Text(lang.isTurkish ? 'Paylaş' : 'Share'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE07A5F),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
           ),
         ],
       ),
@@ -2292,6 +2305,31 @@ class ActivityHistoryPage extends StatelessWidget {
             ? '$steps adım → $hope Hope kazanıldı' 
             : '$steps steps → $hope Hope earned';
         break;
+      case 'step_carryover':
+        imagePath = 'assets/icons/adim.png';
+        color = Colors.orange;
+        final carriedSteps = activity['steps'] ?? 0;
+        final fromDate = activity['from_date'] ?? '';
+        title = lang.isTurkish ? 'Adımlar Taşındı' : 'Steps Carried Over';
+        subtitle = lang.isTurkish 
+            ? '$carriedSteps adımınız bugüne taşındı' 
+            : '$carriedSteps steps carried to today';
+        break;
+      case 'steps_expired':
+        icon = Icons.delete_outline;
+        color = Colors.red;
+        final expiredSteps = activity['steps'] ?? 0;
+        final expiredMonth = activity['month'] ?? 0;
+        final expiredYear = activity['year'] ?? 0;
+        final monthNames = lang.isTurkish 
+            ? ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık']
+            : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        final monthName = expiredMonth > 0 && expiredMonth <= 12 ? monthNames[expiredMonth - 1] : '';
+        title = lang.isTurkish ? 'Adımlar Silindi' : 'Steps Expired';
+        subtitle = lang.isTurkish 
+            ? '$expiredSteps adımınız silindi ($monthName $expiredYear)' 
+            : '$expiredSteps steps expired ($monthName $expiredYear)';
+        break;
       case 'bonus_conversion':
         imagePath = 'assets/icons/adim.png';
         color = const Color(0xFF9B59B6); // Mor
@@ -2326,20 +2364,30 @@ class ActivityHistoryPage extends StatelessWidget {
         icon = Icons.group_add;
         color = const Color(0xFF27AE60); // Yeşil
         final teamBonusAmount = activity['bonus_steps'] ?? 100000;
+        final newMemberName = activity['new_member_name'];
         title = lang.isTurkish ? 'Takım Davet Bonusu' : 'Team Referral Bonus';
         subtitle = lang.isTurkish 
-            ? '+${_formatActivityNumber(teamBonusAmount)} bonus adım kazanıldı' 
-            : '+${_formatActivityNumber(teamBonusAmount)} bonus steps earned';
+            ? '+${_formatActivityNumber(teamBonusAmount)} bonus adım kazanıldı${newMemberName != null ? ' ($newMemberName katıldı)' : ''}' 
+            : '+${_formatActivityNumber(teamBonusAmount)} bonus steps earned${newMemberName != null ? ' ($newMemberName joined)' : ''}';
+        break;
+      case 'referral_bonus':
+        icon = Icons.person_add;
+        color = const Color(0xFF9B59B6); // Mor
+        final refBonusAmount = activity['bonus_steps'] ?? 100000;
+        final refUserName = activity['other_user_name'];
+        title = lang.isTurkish ? 'Davet Bonusu' : 'Referral Bonus';
+        subtitle = lang.isTurkish 
+            ? '+${_formatActivityNumber(refBonusAmount)} bonus adım kazanıldı${refUserName != null ? ' ($refUserName)' : ''}' 
+            : '+${_formatActivityNumber(refBonusAmount)} bonus steps earned${refUserName != null ? ' ($refUserName)' : ''}';
         break;
       case 'reward_ad_bonus':
-        imagePath = 'assets/icons/adim.png';
+        icon = Icons.play_circle_filled;
         color = const Color(0xFFF2C94C);
-        final adSteps = activity['steps_converted'] ?? 0;
-        final adHope = (activity['hope_earned'] ?? activity['amount'] as num?)?.toStringAsFixed(1) ?? '0';
-        title = lang.isTurkish ? 'Bonus Adım Dönüşümü' : 'Bonus Step Conversion';
+        final adHope = (activity['amount'] as num?)?.toStringAsFixed(1) ?? '0';
+        title = lang.isTurkish ? 'Reklam Bonusu' : 'Ad Reward Bonus';
         subtitle = lang.isTurkish 
-            ? '$adSteps adım → $adHope Hope kazanıldı' 
-            : '$adSteps steps → $adHope Hope earned';
+            ? '+$adHope Hope kazanıldı' 
+            : '+$adHope Hope earned';
         break;
       case 'team_joined':
         icon = Icons.group_add;

@@ -36,10 +36,39 @@ class _CharityScreenState extends State<CharityScreen> {
   List<CharityModel> _communities = [];
   List<CharityModel> _individuals = [];
 
+  // 🔄 Real-time user stream
+  StreamSubscription<DocumentSnapshot>? _userSubscription;
+
   @override
   void initState() {
     super.initState();
     _loadData();
+    _setupUserStream(); // Real-time kullanıcı dinleyicisi
+  }
+
+  @override
+  void dispose() {
+    _userSubscription?.cancel();
+    super.dispose();
+  }
+
+  /// 🔄 Kullanıcı verilerini real-time dinle
+  void _setupUserStream() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    _userSubscription = _firestore
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
+      if (snapshot.exists) {
+        setState(() {
+          _currentUser = UserModel.fromMap(snapshot.data()!, uid);
+        });
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -676,8 +705,8 @@ class _CharityScreenState extends State<CharityScreen> {
   Future<void> _handleDonationNew(CharityModel charity) async {
     double balance = _currentUser?.walletBalanceHope ?? 0;
 
-    // Bakiye kontrolü - 5 Hope'tan az ise uyarı
-    if (balance < 5) {
+    // Bakiye kontrolü - 10 Hope'tan az ise uyarı (minimum bağış 10 Hope)
+    if (balance < 10) {
       _showInsufficientBalanceDialog();
       return;
     }
@@ -801,8 +830,8 @@ class _CharityScreenState extends State<CharityScreen> {
       // 🎖️ Lifetime bağışı güncelle ve rozet kontrol et
       await BadgeService().updateLifetimeDonations(amount);
 
-      // Kullanıcı verisini yenile
-      await _loadUserData();
+      // Kullanıcı ve vakıf/topluluk verilerini yenile
+      await _loadData();
 
       // Başarı mesajı
       if (mounted) {
@@ -948,12 +977,17 @@ class _CharityScreenState extends State<CharityScreen> {
               child: Text(lang.cancel),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context, selectedAmount),
+              onPressed: selectedAmount <= maxAmount 
+                  ? () => Navigator.pop(context, selectedAmount)
+                  : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE07A5F),
                 foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey[300],
               ),
-              child: Text(lang.continueBtn),
+              child: Text(selectedAmount <= maxAmount 
+                  ? lang.continueBtn 
+                  : lang.isTurkish ? 'Yetersiz Bakiye' : 'Insufficient Balance'),
             ),
           ],
         ),

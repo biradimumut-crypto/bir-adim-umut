@@ -60,11 +60,16 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   List<int> _weeklySteps = [0, 0, 0, 0, 0, 0, 0];
   List<int> _weeklyConvertedSteps = [0, 0, 0, 0, 0, 0, 0];
 
+  // 🔄 Real-time Firestore Streams
+  StreamSubscription<DocumentSnapshot>? _userSubscription;
+  StreamSubscription<DocumentSnapshot>? _dailyStepsSubscription;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this); // Lifecycle observer ekle
     _loadAllData();
+    _setupRealtimeListeners(); // Real-time dinleyicileri başlat
     // Dashboard açıldığında yeni rozetleri kontrol et (delay ile)
     _checkNewBadges(withDelay: true);
   }
@@ -73,7 +78,64 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   void dispose() {
     WidgetsBinding.instance.removeObserver(this); // Lifecycle observer kaldır
     _cooldownTimer?.cancel();
+    _userSubscription?.cancel(); // User stream'i iptal et
+    _dailyStepsSubscription?.cancel(); // DailySteps stream'i iptal et
     super.dispose();
+  }
+
+  /// 🔄 Firestore real-time dinleyicileri kur
+  void _setupRealtimeListeners() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    // User dokümanını dinle (Hope bakiyesi, carryover vs.)
+    _userSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
+      if (snapshot.exists) {
+        final data = snapshot.data()!;
+        setState(() {
+          // UserModel güncelle
+          _currentUser = UserModel.fromMap(data, uid);
+          // Carryover ve bonus değerlerini güncelle
+          _carryOverSteps = (data['carryover_pending'] ?? 0) as int;
+          _bonusSteps = (data['referral_bonus_pending'] ?? 0) as int;
+          _leaderboardBonusSteps = (data['leaderboard_bonus_pending'] ?? 0) as int;
+        });
+      }
+    }, onError: (e) {
+      debugPrint('User stream error: $e');
+    });
+
+    // Bugünün adım verilerini dinle
+    final today = DateTime.now();
+    final todayKey = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    
+    _dailyStepsSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('daily_steps')
+        .doc(todayKey)
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
+      if (snapshot.exists) {
+        final data = snapshot.data()!;
+        final dailySteps = (data['daily_steps'] ?? 0) as int;
+        final convertedSteps = (data['converted_steps'] ?? 0) as int;
+        setState(() {
+          _dailySteps = dailySteps;
+          _convertedSteps = convertedSteps > dailySteps ? dailySteps : convertedSteps;
+          _remainingSteps = _dailySteps - _convertedSteps;
+          if (_remainingSteps < 0) _remainingSteps = 0;
+        });
+      }
+    }, onError: (e) {
+      debugPrint('DailySteps stream error: $e');
+    });
   }
 
   /// Uygulama arka plandan döndüğünde otomatik yenile

@@ -72,7 +72,13 @@ class BadgeService {
       for (final doc in globalLogs.docs) {
         final data = doc.data();
         final activityType = data['activity_type'] ?? data['action_type'] ?? '';
-        if (activityType == 'step_conversion' || activityType == 'carryover_conversion') {
+        // step_conversion, step_conversion_2x, carryover_conversion, bonus_conversion
+        if (activityType == 'step_conversion' || 
+            activityType == 'step_conversion_2x' || 
+            activityType == 'carryover_conversion' ||
+            activityType == 'bonus_conversion' ||
+            activityType == 'leaderboard_bonus_conversion' ||
+            activityType == 'team_bonus_conversion') {
           totalSteps += (data['steps_converted'] ?? data['steps'] ?? 0) as int;
         }
       }
@@ -86,8 +92,14 @@ class BadgeService {
       
       for (final doc in userLogs.docs) {
         final data = doc.data();
-        final actionType = data['action_type'] ?? data['activity_type'] ?? '';
-        if (actionType == 'step_conversion' || actionType == 'carryover_conversion') {
+        final actionType = data['activity_type'] ?? data['action_type'] ?? '';
+        // step_conversion, step_conversion_2x, carryover_conversion, bonus_conversion
+        if (actionType == 'step_conversion' || 
+            actionType == 'step_conversion_2x' || 
+            actionType == 'carryover_conversion' ||
+            actionType == 'bonus_conversion' ||
+            actionType == 'leaderboard_bonus_conversion' ||
+            actionType == 'team_bonus_conversion') {
           totalSteps += (data['steps_converted'] ?? data['steps'] ?? 0) as int;
         }
       }
@@ -109,17 +121,34 @@ class BadgeService {
   /// Activity logs'tan toplam bağışları hesapla
   Future<double> _calculateLifetimeDonations(String uid) async {
     try {
-      // User subcollection'dan bağışları al
-      final userLogs = await _firestore
+      // User subcollection'dan bağışları al (hem activity_type hem action_type destekle)
+      final userLogs1 = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('activity_logs')
+          .where('activity_type', isEqualTo: 'donation')
+          .get();
+      
+      final userLogs2 = await _firestore
           .collection('users')
           .doc(uid)
           .collection('activity_logs')
           .where('action_type', isEqualTo: 'donation')
           .get();
       
+      // Birleştir ve duplicate kaldır
+      final allDocs = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+      for (var doc in userLogs1.docs) {
+        allDocs[doc.id] = doc;
+      }
+      for (var doc in userLogs2.docs) {
+        allDocs[doc.id] = doc;
+      }
+      
       double totalDonations = 0;
-      for (final doc in userLogs.docs) {
-        totalDonations += (doc.data()['amount'] ?? 0).toDouble();
+      for (final doc in allDocs.values) {
+        final data = doc.data();
+        totalDonations += (data['amount'] ?? data['hope_amount'] ?? 0).toDouble();
       }
       
       // Değeri kaydet (bir dahaki sefere hızlı olsun)

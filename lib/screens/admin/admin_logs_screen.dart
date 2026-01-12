@@ -204,6 +204,8 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
         return Text('Kullanıcı: ${log['target_uid'] ?? '-'}\nSebep: ${log['reason'] ?? '-'}');
       case 'unban_user':
         return Text('Kullanıcı: ${log['target_uid'] ?? '-'}');
+      case 'delete_user':
+        return Text('Kullanıcı: ${log['target_name'] ?? '-'}\nUID: ${log['target_uid'] ?? '-'}');
       case 'update_balance':
         return Text(
           'Kullanıcı: ${log['target_uid'] ?? '-'}\n'
@@ -215,11 +217,19 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
       case 'update_charity':
       case 'delete_charity':
         return Text('ID: ${log['charity_id'] ?? '-'}\nTür: ${log['charity_type'] ?? '-'}');
+      case 'activate_charity':
+        return Text('${log['charity_name'] ?? '-'} aktif edildi\nTür: ${log['charity_type'] ?? '-'}');
+      case 'deactivate_charity':
+        return Text('${log['charity_name'] ?? '-'} pasif edildi\nTür: ${log['charity_type'] ?? '-'}');
       case 'create_badge':
       case 'delete_badge':
         return Text('Rozet: ${log['badge_name'] ?? log['badge_id'] ?? '-'}');
+      case 'update_badge':
+        return Text('Rozet: ${log['badge_name'] ?? '-'}\nSeviye: ${log['new_level'] ?? '-'}');
       case 'send_broadcast':
         return Text('Başlık: ${log['title'] ?? '-'}');
+      case 'update_admin_stats':
+        return Text('iOS: ${log['ios_downloads'] ?? 0}\nAndroid: ${log['android_downloads'] ?? 0}\nGelir: \$${log['ad_revenue']?.toStringAsFixed(2) ?? '0'}');
       case 'mark_donation_transferred':
         final donationId = log['donation_id'] ?? '-';
         final amount = log['amount']?.toStringAsFixed(1) ?? '0';
@@ -284,6 +294,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
   Color _getActionColor(String action) {
     switch (action) {
       case 'ban_user':
+      case 'delete_user':
         return Colors.red;
       case 'unban_user':
         return Colors.green;
@@ -292,11 +303,15 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
       case 'delete_team':
       case 'delete_charity':
       case 'delete_badge':
+      case 'deactivate_charity':
         return Colors.red;
       case 'create_charity':
       case 'create_badge':
+      case 'activate_charity':
         return Colors.green;
       case 'update_charity':
+      case 'update_badge':
+      case 'update_admin_stats':
         return Colors.blue;
       case 'send_broadcast':
         return Colors.purple;
@@ -315,6 +330,8 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
         return Icons.block;
       case 'unban_user':
         return Icons.lock_open;
+      case 'delete_user':
+        return Icons.person_remove;
       case 'update_balance':
         return Icons.account_balance_wallet;
       case 'delete_team':
@@ -325,12 +342,20 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
         return Icons.edit;
       case 'delete_charity':
         return Icons.delete;
+      case 'activate_charity':
+        return Icons.check_circle;
+      case 'deactivate_charity':
+        return Icons.cancel;
       case 'create_badge':
         return Icons.emoji_events;
+      case 'update_badge':
+        return Icons.edit;
       case 'delete_badge':
         return Icons.remove_circle;
       case 'send_broadcast':
         return Icons.campaign;
+      case 'update_admin_stats':
+        return Icons.analytics;
       case 'mark_donation_transferred':
         return Icons.check_circle;
       case 'unmark_donation_transferred':
@@ -346,6 +371,8 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
         return 'Kullanıcı Banlandı';
       case 'unban_user':
         return 'Ban Kaldırıldı';
+      case 'delete_user':
+        return 'Kullanıcı Silindi';
       case 'update_balance':
         return 'Bakiye Güncellendi';
       case 'delete_team':
@@ -356,12 +383,20 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
         return 'Bağış Alıcısı Güncellendi';
       case 'delete_charity':
         return 'Bağış Alıcısı Silindi';
+      case 'activate_charity':
+        return 'Bağış Alıcısı Aktifleştirildi';
+      case 'deactivate_charity':
+        return 'Bağış Alıcısı Devre Dışı Bırakıldı';
       case 'create_badge':
         return 'Rozet Oluşturuldu';
+      case 'update_badge':
+        return 'Rozet Güncellendi';
       case 'delete_badge':
         return 'Rozet Silindi';
       case 'send_broadcast':
         return 'Toplu Bildirim Gönderildi';
+      case 'update_admin_stats':
+        return 'Platform İstatistikleri Güncellendi';
       case 'mark_donation_transferred':
         return 'Bağış Aktarıldı';
       case 'unmark_donation_transferred':

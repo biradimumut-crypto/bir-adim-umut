@@ -634,7 +634,7 @@ class _TeamsScreenState extends State<TeamsScreen> with WidgetsBindingObserver {
       
       // 3. Takım üye sayısını artır
       batch.update(_firestore.collection('teams').doc(teamId), {
-        'member_count': FieldValue.increment(1),
+        'members_count': FieldValue.increment(1),
       });
       
       // 4. Notification'ı accepted olarak güncelle
@@ -1339,6 +1339,7 @@ class _TeamsScreenState extends State<TeamsScreen> with WidgetsBindingObserver {
           });
 
           // Activity log ekle
+          // Global
           final logRef = _firestore.collection('activity_logs').doc();
           batch.set(logRef, {
             'user_id': uid,
@@ -1348,6 +1349,20 @@ class _TeamsScreenState extends State<TeamsScreen> with WidgetsBindingObserver {
             'hope_earned': hopeEarned,
             'is_team_bonus': true,
             'created_at': FieldValue.serverTimestamp(),
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+          
+          // User subcollection
+          final userLogRef = _firestore.collection('users').doc(uid).collection('activity_logs').doc();
+          batch.set(userLogRef, {
+            'user_id': uid,
+            'team_id': _currentTeam!.teamId,
+            'activity_type': 'team_bonus_conversion',
+            'steps_converted': steps,
+            'hope_earned': hopeEarned,
+            'is_team_bonus': true,
+            'created_at': FieldValue.serverTimestamp(),
+            'timestamp': FieldValue.serverTimestamp(),
           });
 
           await batch.commit();
@@ -2460,6 +2475,29 @@ class _TeamsScreenState extends State<TeamsScreen> with WidgetsBindingObserver {
 
       await _firestore.collection('users').doc(uid).update({
         'current_team_id': teamRef.id,
+      });
+
+      // Activity log ekle - team_created
+      final now = Timestamp.now();
+      
+      // Global
+      await _firestore.collection('activity_logs').add({
+        'user_id': uid,
+        'activity_type': 'team_created',
+        'team_id': teamRef.id,
+        'team_name': name,
+        'created_at': now,
+        'timestamp': now,
+      });
+      
+      // User subcollection
+      await _firestore.collection('users').doc(uid).collection('activity_logs').add({
+        'user_id': uid,
+        'activity_type': 'team_created',
+        'team_id': teamRef.id,
+        'team_name': name,
+        'created_at': now,
+        'timestamp': now,
       });
 
       final lang = context.read<LanguageProvider>();

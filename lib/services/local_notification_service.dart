@@ -467,10 +467,8 @@ class LocalNotificationService {
     print('Morning motivation notification scheduled: 11:00');
   }
 
-  /// 🌙 Akşam 20:00 Hatırlatma Bildirimi Zamanla
-  Future<void> scheduleEveningReminder(int unconvertedSteps) async {
-    if (unconvertedSteps <= 0) return;
-
+  /// 🌙 Akşam 20:00 Hatırlatma Bildirimi Zamanla (Her gün tekrar eder)
+  Future<void> scheduleEveningReminder([int? unconvertedSteps]) async {
     // Dil kontrolü yap
     final isTurkish = await _isTurkish();
     
@@ -479,15 +477,17 @@ class LocalNotificationService {
     final messages = isTurkish ? _eveningMessagesTr : _eveningMessagesEn;
     final message = messages[random.nextInt(messages.length)];
     
-    // {steps} placeholder'ını değiştir
+    // {steps} placeholder'ını değiştir (varsa)
     final title = message['title']!;
-    final body = message['body']!.replaceAll('{steps}', unconvertedSteps.toString());
+    final body = unconvertedSteps != null 
+        ? message['body']!.replaceAll('{steps}', unconvertedSteps.toString())
+        : message['body']!.replaceAll('{steps}', '').replaceAll('Bugün  adım attın ama', 'Bugün adım attın ama');
 
     await _notifications.zonedSchedule(
       eveningReminderId,
       title,
       body,
-      _nextInstanceOfTime(20, 0), // Akşam 20:00
+      _nextInstanceOfTime(22, 0), // Akşam 22:00
       NotificationDetails(
         android: _getAndroidDetails(
           channelId: 'reminder_channel',
@@ -497,9 +497,10 @@ class LocalNotificationService {
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: DateTimeComponents.time, // Her gün tekrarla
       payload: 'evening_reminder',
     );
-    print('Evening reminder notification scheduled: 20:00');
+    print('Evening reminder notification scheduled: 20:00 (repeating daily)');
   }
 
   /// Belirli saatte sonraki instance'ı hesapla
@@ -515,9 +516,10 @@ class LocalNotificationService {
 
   /// Tüm günlük bildirimleri zamanla
   Future<void> scheduleAllDailyNotifications() async {
-    await scheduleMorningMotivation();
-    await scheduleMonthEndWarnings(); // Ay sonu uyarılarını zamanla
-    print('All daily notifications scheduled!');
+    await scheduleMorningMotivation();      // Sabah 11:00
+    await scheduleEveningReminder();        // Akşam 20:00
+    await scheduleMonthEndWarnings();       // Ay sonu uyarıları (son 3 gün, 15:00)
+    print('All daily notifications scheduled! (11:00, 20:00, month-end warnings)');
   }
 
   /// Belirli bir bildirimi iptal et

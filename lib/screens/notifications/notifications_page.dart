@@ -323,11 +323,24 @@ class _NotificationsPageState extends State<NotificationsPage> {
         });
 
         // Activity log
+        final now = Timestamp.now();
+        
+        // Global
         await _firestore.collection('activity_logs').add({
           'user_id': uid,
           'activity_type': 'team_joined',
           'team_name': notif['team_name'],
-          'created_at': Timestamp.now(),
+          'created_at': now,
+          'timestamp': now,
+        });
+        
+        // User subcollection
+        await _firestore.collection('users').doc(uid).collection('activity_logs').add({
+          'user_id': uid,
+          'activity_type': 'team_joined',
+          'team_name': notif['team_name'],
+          'created_at': now,
+          'timestamp': now,
         });
 
         await showSuccessDialog(

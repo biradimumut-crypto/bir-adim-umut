@@ -12,17 +12,21 @@ class ActivityLogService {
   /// 
   /// İş Mantığı:
   /// 1. Kullanıcının bakiyesi kontrol edilir (>= 5 Hope)
-  /// 2. Reklam gösterilir (app'de implementation)
-  /// 3. Activity log oluşturulur
-  /// 4. Kullanıcı bakiyesi güncellenir
-  /// 5. Team'in toplam Hope'ü güncellenir
-  /// 6. Team member'ın Hope'ü güncellenir
+  /// ⚠️ DEPRECATED: Bu fonksiyon artık kullanılmıyor!
+  /// Bağış işlemleri CharityScreen._processDonationNew() üzerinden yapılıyor.
+  /// Bu fonksiyon geriye uyumluluk için bırakıldı ancak çağrılmamalı.
+  /// 
+  /// Bunun yerine CharityScreen üzerinden bağış yapın.
+  @Deprecated('Use CharityScreen._processDonationNew() instead')
   Future<Map<String, dynamic>> createDonationLog({
     required String charityName,
     required String charityId,
     required double hopeAmount,
     String? charityLogoUrl,
   }) async {
+    // ⚠️ Bu fonksiyon kullanılmamalı - CharityScreen kullanın
+    print('⚠️ UYARI: createDonationLog deprecated! CharityScreen kullanın.');
+    
     try {
       final userId = _auth.currentUser?.uid;
       if (userId == null) {
@@ -48,16 +52,20 @@ class ActivityLogService {
         };
       }
 
-      // 1. User subcollection'a activity log oluştur (rozet hesaplama için)
+      // 1. Activity log oluştur
+      final now = Timestamp.now();
+      
+      // User subcollection'a activity log oluştur (rozet hesaplama için)
       final userLogRef = _firestore.collection('users').doc(userId).collection('activity_logs').doc();
       await userLogRef.set({
         'user_id': userId,
-        'activity_type': 'donation', // ✅ Standart format
+        'activity_type': 'donation',
         'action_type': 'donation',  // Geriye uyumluluk
         'target_name': charityName,
         'charity_id': charityId,
         'amount': hopeAmount,
-        'timestamp': Timestamp.now(),
+        'created_at': now,
+        'timestamp': now,
         'charity_logo_url': charityLogoUrl,
       });
       
@@ -69,9 +77,10 @@ class ActivityLogService {
         'activity_type': 'donation',
         'charity_id': charityId,
         'charity_name': charityName,
-        'amount': hopeAmount,  // Tutarlılık için amount kullan
+        'amount': hopeAmount,
         'hope_amount': hopeAmount,  // Geriye uyumluluk için
-        'created_at': Timestamp.now(),
+        'created_at': now,
+        'timestamp': now,
         'charity_logo_url': charityLogoUrl,
       });
 
@@ -147,17 +156,17 @@ class ActivityLogService {
     }
   }
 
-  /// Adım dönüştürme işlemini kaydıt
+  /// ⚠️ DEPRECATED: Bu fonksiyon artık kullanılmıyor!
+  /// Adım dönüştürme işlemleri step_conversion_service.dart üzerinden yapılıyor.
+  /// Bu fonksiyon geriye uyumluluk için bırakıldı ancak çağrılmamalı.
   /// 
-  /// İş Mantığı:
-  /// 1. Dönüştürülebilecek adım sayısı kontrol edilir (max 2500)
-  /// 2. Cooldown kontrol edilir (10 dakika)
-  /// 3. Activity log oluşturulur
-  /// 4. Hope bakiyesi güncellenir (2500 adım = 25 Hope, 100 adım = 1 Hope)
-  /// 5. Günlük adım verisi güncellenir
+  /// Bunun yerine StepConversionService.convertDailySteps() kullanın.
+  @Deprecated('Use StepConversionService.convertDailySteps() instead')
   Future<Map<String, dynamic>> createStepConversionLog({
     required int stepsToConvert,
   }) async {
+    // ⚠️ Bu fonksiyon kullanılmamalı - step_conversion_service.dart kullanın
+    print('⚠️ UYARI: createStepConversionLog deprecated! StepConversionService kullanın.');
     try {
       final userId = _auth.currentUser?.uid;
       if (userId == null) {
@@ -272,18 +281,46 @@ class ActivityLogService {
     required DateTime endDate,
   }) async {
     try {
-      final snapshot = await _firestore
+      // Hem activity_type hem action_type destekle (geriye uyumluluk)
+      final snapshot1 = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('activity_logs')
+          .where('activity_type', isEqualTo: 'donation')
+          .get();
+      
+      final snapshot2 = await _firestore
           .collection('users')
           .doc(userId)
           .collection('activity_logs')
           .where('action_type', isEqualTo: 'donation')
-          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-          .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
           .get();
+      
+      // Birleştir ve duplicate kaldır
+      final allDocs = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+      for (var doc in snapshot1.docs) {
+        allDocs[doc.id] = doc;
+      }
+      for (var doc in snapshot2.docs) {
+        allDocs[doc.id] = doc;
+      }
 
       double total = 0;
-      for (var doc in snapshot.docs) {
-        total += (doc.data()['amount'] ?? 0).toDouble();
+      for (var doc in allDocs.values) {
+        final data = doc.data();
+        // Tarih kontrolü
+        DateTime? logDate;
+        if (data['timestamp'] != null) {
+          logDate = (data['timestamp'] as Timestamp).toDate();
+        } else if (data['created_at'] != null) {
+          logDate = (data['created_at'] as Timestamp).toDate();
+        }
+        
+        if (logDate != null && 
+            logDate.isAfter(startDate.subtract(const Duration(seconds: 1))) &&
+            logDate.isBefore(endDate.add(const Duration(seconds: 1)))) {
+          total += (data['amount'] ?? data['hope_amount'] ?? 0).toDouble();
+        }
       }
 
       return total;
