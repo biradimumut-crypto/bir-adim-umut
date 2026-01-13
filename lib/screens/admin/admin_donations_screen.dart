@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/admin_service.dart';
 import '../../models/charity_model.dart';
 
@@ -15,6 +16,7 @@ class _AdminDonationsScreenState extends State<AdminDonationsScreen> with Single
   late TabController _tabController;
   
   List<DonationRecordModel> _donations = [];
+  Map<String, String> _userNames = {}; // Güncel kullanıcı isimleri
   bool _isLoading = true;
   DateTime _startDate = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _endDate = DateTime.now();
@@ -69,9 +71,13 @@ class _AdminDonationsScreenState extends State<AdminDonationsScreen> with Single
         byRecipient[donation.recipientId]!['count'] += 1;
       }
       
+      // Güncel kullanıcı isimlerini çek
+      final userNames = await _fetchUserNames(uniqueDonors.toList());
+      
       if (mounted) {
         setState(() {
           _donations = donations;
+          _userNames = userNames;
           _totalAmount = total;
           _totalDonors = uniqueDonors.length;
           _byRecipient = byRecipient;
@@ -86,6 +92,33 @@ class _AdminDonationsScreenState extends State<AdminDonationsScreen> with Single
         );
       }
     }
+  }
+
+  /// Kullanıcı ID'lerinden güncel isimleri toplu olarak çeker
+  Future<Map<String, String>> _fetchUserNames(List<String> userIds) async {
+    final Map<String, String> names = {};
+    if (userIds.isEmpty) return names;
+    
+    // Firestore whereIn max 10 destekler, batch'ler halinde çek
+    for (var i = 0; i < userIds.length; i += 10) {
+      final batch = userIds.skip(i).take(10).toList();
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where(FieldPath.documentId, whereIn: batch)
+          .get();
+      
+      for (var doc in snapshot.docs) {
+        names[doc.id] = doc.data()['full_name'] ?? 'Anonim';
+      }
+    }
+    
+    return names;
+  }
+
+  /// Güncel kullanıcı ismini al (cache'den veya fallback)
+  String _getDonorName(DonationRecordModel donation) {
+    if (donation.isAnonymous) return 'Anonim';
+    return _userNames[donation.donorUid] ?? donation.donorName;
   }
 
   List<DonationRecordModel> _getFilteredDonations() {
@@ -384,7 +417,7 @@ class _AdminDonationsScreenState extends State<AdminDonationsScreen> with Single
             ),
             title: Row(
               children: [
-                Expanded(child: Text(donation.isAnonymous ? 'Anonim' : donation.donorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                Expanded(child: Text(_getDonorName(donation), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                 Text('${donation.amount.toStringAsFixed(1)} H', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 14)),
               ],
             ),
@@ -490,6 +523,11 @@ class _AdminDonationsScreenState extends State<AdminDonationsScreen> with Single
     try {
       final donations = await _adminService.getDonationsByRecipientId(recipient['id']);
       if (!mounted) return;
+      
+      // Güncel kullanıcı isimlerini çek
+      final userIds = donations.map((d) => d.donorUid).toSet().toList();
+      final userNames = await _fetchUserNames(userIds);
+      
       Navigator.pop(context);
       
       showDialog(
@@ -503,8 +541,9 @@ class _AdminDonationsScreenState extends State<AdminDonationsScreen> with Single
               itemCount: donations.length,
               itemBuilder: (context, index) {
                 final d = donations[index];
+                final displayName = d.isAnonymous ? 'Anonim' : (userNames[d.donorUid] ?? d.donorName);
                 return ListTile(
-                  title: Text(d.isAnonymous ? 'Anonim' : d.donorName),
+                  title: Text(displayName),
                   subtitle: Text(_formatDateTime(d.donatedAt)),
                   trailing: Text('${d.amount.toStringAsFixed(1)} H', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                 );
