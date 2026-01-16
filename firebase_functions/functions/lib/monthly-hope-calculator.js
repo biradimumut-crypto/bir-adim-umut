@@ -4,6 +4,12 @@ exports.getMonthlyHopeSummary = exports.approvePendingDonations = exports.calcul
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const db = admin.firestore();
+// 🚨 P1-2 REV.2: App Check Helper (v1 API için)
+function assertAppCheck(context) {
+    if (!context.app) {
+        throw new functions.https.HttpsError("failed-precondition", "App Check token gerekli. Lütfen uygulamayı güncelleyin.");
+    }
+}
 /**
  * Aylık Hope Değeri Hesaplama Sistemi
  *
@@ -29,13 +35,39 @@ exports.calculateMonthlyHopeValue = functions.pubsub
     .schedule("0 8 7 * *") // Her ayın 7'si saat 08:00 (İstanbul)
     .timeZone("Europe/Istanbul")
     .onRun(async () => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     try {
         console.log("📊 Aylık Hope değeri hesaplaması başladı...");
         // Önceki ayın tarihlerini hesapla
         const now = new Date();
         const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const monthKey = `${previousMonth.getFullYear()}-${String(previousMonth.getMonth() + 1).padStart(2, "0")}`;
+        // 🚨 IDEMPOTENCY CHECK: Bu ay zaten işlendiyse tekrar çalışma
+        const existingDoc = await db.collection("monthly_hope_value").doc(monthKey).get();
+        if (existingDoc.exists) {
+            const existingData = existingDoc.data();
+            const existingStatus = existingData === null || existingData === void 0 ? void 0 : existingData.status;
+            const completedAt = existingData === null || existingData === void 0 ? void 0 : existingData.completed_at;
+            // approved veya completed ise kesinlikle çık
+            if (["approved", "completed"].includes(existingStatus)) {
+                console.log(`⚠️ ${monthKey} zaten onaylandı/tamamlandı (status: ${existingStatus}), çıkılıyor...`);
+                return null;
+            }
+            // calculated ise: completed_at var mı kontrol et
+            // Eğer completed_at varsa = tam bitti, çık
+            // Eğer completed_at yoksa = yarım kalmış olabilir, tekrar çalış
+            if (existingStatus === "calculated") {
+                if (completedAt) {
+                    console.log(`⚠️ ${monthKey} zaten hesaplandı ve tamamlandı, çıkılıyor...`);
+                    console.log(`📋 Mevcut veri: calculated_at=${(_b = (_a = existingData === null || existingData === void 0 ? void 0 : existingData.calculated_at) === null || _a === void 0 ? void 0 : _a.toDate()) === null || _b === void 0 ? void 0 : _b.toISOString()}`);
+                    return null;
+                }
+                else {
+                    console.log(`⚠️ ${monthKey} yarım kalmış (calculated ama completed_at yok), tekrar hesaplanıyor...`);
+                }
+            }
+        }
+        console.log(`✅ ${monthKey} henüz işlenmemiş veya yarım kalmış, hesaplamaya devam...`);
         const monthStart = new Date(previousMonth.getFullYear(), previousMonth.getMonth(), 1);
         const monthEnd = new Date(previousMonth.getFullYear(), previousMonth.getMonth() + 1, 0, 23, 59, 59);
         console.log(`📅 Hesaplanan ay: ${monthKey}`);
@@ -46,7 +78,7 @@ exports.calculateMonthlyHopeValue = functions.pubsub
         let totalAdRevenueUsd = 0;
         if (adRevenueDoc.exists) {
             const data = adRevenueDoc.data();
-            totalAdRevenueUsd = ((_a = data === null || data === void 0 ? void 0 : data.total_revenue) !== null && _a !== void 0 ? _a : 0);
+            totalAdRevenueUsd = ((_c = data === null || data === void 0 ? void 0 : data.total_revenue) !== null && _c !== void 0 ? _c : 0);
         }
         // 2. ad_revenue_history'den o aya ait gelirleri topla (daha doğru)
         const historySnapshot = await db.collection("ad_revenue_history")
@@ -70,7 +102,7 @@ exports.calculateMonthlyHopeValue = functions.pubsub
         const usersSnapshot = await db.collection("users").get();
         for (const doc of usersSnapshot.docs) {
             const userData = doc.data();
-            currentTotalHope += ((_b = userData.lifetime_earned_hope) !== null && _b !== void 0 ? _b : 0);
+            currentTotalHope += ((_d = userData.lifetime_earned_hope) !== null && _d !== void 0 ? _d : 0);
         }
         // Önceki ayın kümülatif toplamını al
         const prevMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1);
@@ -78,7 +110,7 @@ exports.calculateMonthlyHopeValue = functions.pubsub
         let previousCumulativeHope = 0;
         const prevMonthDoc = await db.collection("monthly_hope_value").doc(prevMonthKey).get();
         if (prevMonthDoc.exists) {
-            previousCumulativeHope = ((_d = (_c = prevMonthDoc.data()) === null || _c === void 0 ? void 0 : _c.cumulative_hope) !== null && _d !== void 0 ? _d : 0);
+            previousCumulativeHope = ((_f = (_e = prevMonthDoc.data()) === null || _e === void 0 ? void 0 : _e.cumulative_hope) !== null && _f !== void 0 ? _f : 0);
         }
         // Bu ay üretilen Hope = Şu anki toplam - Önceki ay sonu toplam
         const totalHopeProduced = currentTotalHope - previousCumulativeHope;
@@ -114,7 +146,11 @@ exports.calculateMonthlyHopeValue = functions.pubsub
         await db.collection("monthly_hope_value").doc(monthKey).set(monthlyData);
         // 8. O aydaki pending bağışları güncelle (status: pending_calculation -> pending_approval)
         await updatePendingDonationsStatus(monthKey, hopeValueTl);
-        console.log(`✅ ${monthKey} ayı Hope değeri hesaplandı ve kaydedildi`);
+        // 🚨 IDEMPOTENCY: İşlem tamamen bittikten sonra completed_at'i işaretle
+        await db.collection("monthly_hope_value").doc(monthKey).update({
+            completed_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        console.log(`✅ ${monthKey} ayı Hope değeri hesaplandı ve kaydedildi (completed_at işaretlendi)`);
         return null;
     }
     catch (error) {
@@ -156,9 +192,12 @@ async function updatePendingDonationsStatus(monthKey, hopeValueTl) {
 }
 /**
  * Admin manuel tetikleme - belirli bir ay için hesaplama
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.calculateMonthlyHopeValueManual = functions.https.onCall(async (data, context) => {
     var _a, _b, _c, _d, _e;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     // Admin kontrolü
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "Giriş yapmanız gerekiyor");
@@ -266,9 +305,12 @@ exports.calculateMonthlyHopeValueManual = functions.https.onCall(async (data, co
 /**
  * Admin onayı ile bağışları "completed" durumuna geçir
  * Derneğe aktarım için hazır olduğunda kullanılır
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.approvePendingDonations = functions.https.onCall(async (data, context) => {
     var _a, _b, _c;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     // Admin kontrolü
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "Giriş yapmanız gerekiyor");
@@ -340,8 +382,11 @@ exports.approvePendingDonations = functions.https.onCall(async (data, context) =
 });
 /**
  * Aylık özet raporu getir (Admin panel için)
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.getMonthlyHopeSummary = functions.https.onCall(async (data, context) => {
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     // Admin kontrolü
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "Giriş yapmanız gerekiyor");

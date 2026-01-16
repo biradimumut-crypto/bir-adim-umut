@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Doğrulandı - Bir Adım Umut</title>
+    <link rel="icon" type="image/png" href="icons/Icon-192.png">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #E8F7F5 0%, #ffffff 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            padding: 48px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .icon {
+            width: 80px;
+            height: 80px;
+            background: #E8F7F5;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+        }
+        
+        .icon svg {
+            width: 40px;
+            height: 40px;
+            color: #6EC6B5;
+        }
+        
+        .icon.loading svg {
+            animation: spin 1s linear infinite;
+        }
+        
+        .icon.error {
+            background: #FFE5E5;
+        }
+        
+        .icon.error svg {
+            color: #E07A5F;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 12px;
+        }
+        
+        p {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+        
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #6EC6B5 0%, #5AB5A4 100%);
+            color: white;
+            padding: 14px 32px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(110, 198, 181, 0.4);
+        }
+        
+        .logo {
+            margin-bottom: 32px;
+        }
+        
+        .logo img {
+            width: 120px;
+            height: auto;
+        }
+        
+        .footer {
+            margin-top: 32px;
+            color: #999;
+            font-size: 14px;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="icons/Icon-192.png" alt="Bir Adım Umut" onerror="this.style.display='none'">
+        </div>
+        
+        <!-- Loading State -->
+        <div id="loading-state">
+            <div class="icon loading">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 6v6l4 2"></path>
+                </svg>
+            </div>
+            <h1>Doğrulanıyor...</h1>
+            <p>Lütfen bekleyin, email adresiniz doğrulanıyor.</p>
+        </div>
+        
+        <!-- Success State -->
+        <div id="success-state" class="hidden">
+            <div class="icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 6L9 17l-5-5"></path>
+                </svg>
+            </div>
+            <h1>Email Doğrulandı! ✅</h1>
+            <p>Email adresiniz başarıyla doğrulandı. Artık uygulamaya giriş yapabilirsiniz.</p>
+            <a href="https://biradimumut.page.link/app" class="btn" id="open-app-btn">Uygulamayı Aç</a>
+        </div>
+        
+        <!-- Error State -->
+        <div id="error-state" class="hidden">
+            <div class="icon error">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+            </div>
+            <h1>Bir Hata Oluştu</h1>
+            <p id="error-message">Link geçersiz veya süresi dolmuş olabilir. Lütfen uygulamadan tekrar doğrulama maili isteyin.</p>
+        </div>
+        
+        <div class="footer">
+            Bir Adım Umut © 2026
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    
+    <script>
+        // Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyC3u8jK6JuL7BIllbBU7FuZgkftptpYwEI",
+            authDomain: "bir-adim-umut-yeni.firebaseapp.com",
+            projectId: "bir-adim-umut-yeni",
+        };
+        
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        
+        // States
+        const loadingState = document.getElementById('loading-state');
+        const successState = document.getElementById('success-state');
+        const errorState = document.getElementById('error-state');
+        const errorMessage = document.getElementById('error-message');
+        
+        function showSuccess() {
+            loadingState.classList.add('hidden');
+            successState.classList.remove('hidden');
+            errorState.classList.add('hidden');
+        }
+        
+        function showError(message) {
+            loadingState.classList.add('hidden');
+            successState.classList.add('hidden');
+            errorState.classList.remove('hidden');
+            if (message) {
+                errorMessage.textContent = message;
+            }
+        }
+        
+        // URL'den action code'u al ve doğrula
+        async function handleEmailVerification() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const mode = urlParams.get('mode');
+            const oobCode = urlParams.get('oobCode');
+            
+            if (mode !== 'verifyEmail' || !oobCode) {
+                // Eğer parametreler yoksa, belki direkt başarı sayfası olarak açılmıştır
+                // Firebase zaten doğrulamış olabilir
+                showSuccess();
+                return;
+            }
+            
+            try {
+                // Email'i doğrula
+                await firebase.auth().applyActionCode(oobCode);
+                showSuccess();
+            } catch (error) {
+                console.error('Verification error:', error);
+                
+                let message = 'Bir hata oluştu. Lütfen tekrar deneyin.';
+                
+                switch (error.code) {
+                    case 'auth/expired-action-code':
+                        message = 'Bu doğrulama linki süresi dolmuş. Lütfen uygulamadan yeni bir doğrulama maili isteyin.';
+                        break;
+                    case 'auth/invalid-action-code':
+                        message = 'Bu doğrulama linki geçersiz veya zaten kullanılmış.';
+                        break;
+                    case 'auth/user-disabled':
+                        message = 'Bu hesap devre dışı bırakılmış.';
+                        break;
+                    case 'auth/user-not-found':
+                        message = 'Bu hesap bulunamadı.';
+                        break;
+                }
+                
+                showError(message);
+            }
+        }
+        
+        // Sayfa yüklendiğinde çalıştır
+        handleEmailVerification();
+    </script>
+</body>
+</html>

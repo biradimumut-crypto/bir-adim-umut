@@ -1,0 +1,607 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ========== HELPER FUNCTIONS ==========
+    
+    /// Kullanıcı kimlik doğrulaması kontrolü
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // 🚨 P1-2 REV.2: App Check enforcement Firebase Console'dan yönetilir
+    // Rules içinde claim kontrolü YAPILMAZ (yanlış API)
+    // Console → App Check → Enforcement → Firestore → Enforced
+    
+    /// Kullanıcının kendi verilerine erişimi
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+    
+    /// Admin kontrolü
+    function isAdmin() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.is_active == true;
+    }
+    
+    /// Takım liderini kontrol et
+    function isTeamLeader(teamId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/teams/$(teamId)).data.leader_uid == request.auth.uid;
+    }
+    
+    /// Kullanıcı takımda üye mi?
+    function isTeamMember(teamId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/teams/$(teamId)/team_members/$(request.auth.uid));
+    }
+    
+    // ========== USERS KOLEKSIYONU ==========
+    
+    match /users/{userId} {
+      // Herkes okuyabilir (sıralama amaçlı)
+      allow read: if isAuthenticated();
+      
+      // Kendi profilini güncelle
+      allow update: if isUser(userId);
+      
+      // Admin kullanıcıları güncelleyebilir (ban, bakiye vb.)
+      allow update: if isAdmin();
+      
+      // Admin kullanıcıyı silebilir
+      allow delete: if isAdmin();
+      
+      // Referral bonus güncelleme (başka kullanıcı davet edildiğinde)
+      // referral_bonus_steps ve referral_count tek tek veya birlikte güncellenebilir
+      allow update: if isAuthenticated() &&
+                      request.resource.data.diff(resource.data).affectedKeys()
+                        .hasAny(['referral_bonus_steps', 'referral_count']) &&
+                      request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['referral_bonus_steps', 'referral_count']);
+      
+      // Takım lideri başka kullanıcının current_team_id'sini güncelleyebilir (katılma isteği kabul edildiğinde)
+      allow update: if isAuthenticated() &&
+                      request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['current_team_id']);
+      
+      // Yeni user doc oluştur (Sign Up sırasında) - auth uid eşleşmesi yeterli
+      allow create: if request.auth != null && request.auth.uid == userId;
+      
+      // ========== NOTIFICATIONS ALT KOLEKSİYONU ==========
+      
+      match /notifications/{notificationId} {
+        // Kendi bildirimleri oku
+        allow read: if isUser(userId);
+        
+        // Bildirimi güncelle (Cloud Function tarafından)
+        allow update: if isUser(userId);
+        
+        // Bildirimi sil (kullanıcı veya admin)
+        allow delete: if isUser(userId) || isAdmin();
+      }
+      
+      // ========== ACTIVITY_LOGS ALT KOLEKSİYONU ==========
+      
+      match /activity_logs/{logId} {
+        // Kendi aktivite geçmişini oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
+        
+        // 🚨 KRİTİK FIX: Sadece kendi subcollection'ına log yazabilir
+        // Referral bonus logları Cloud Function tarafından Admin SDK ile yazılır
+        allow create: if isUser(userId) && 
+                         request.resource.data.user_id == request.auth.uid;
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
+      }
+      
+      // ========== ACTIVITY_LOG ALT KOLEKSİYONU (Referral bonusları için) ==========
+      
+      match /activity_log/{logId} {
+        // Kendi aktivite geçmişini oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
+        
+        // 🚨 KRİTİK FIX: Sadece kendi subcollection'ına log yazabilir
+        // Referral bonus logları Cloud Function tarafından Admin SDK ile yazılır
+        allow create: if isUser(userId) && 
+                         request.resource.data.user_id == request.auth.uid;
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
+      }
+      
+      // ========== BADGES ALT KOLEKSİYONU (Rozetler) ==========
+      
+      match /badges/{badgeId} {
+        // Kendi rozetlerini oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
+        
+        // Rozet kazanıldığında oluştur (kendi rozetini)
+        allow create: if isUser(userId);
+        
+        // Rozeti "görüldü" olarak işaretle
+        allow update: if isUser(userId);
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
+      }
+      
+      // ========== DAILY_STEPS ALT KOLEKSİYONU ==========
+      
+      match /daily_steps/{dateKey} {
+        // Kendi günlük adım verilerini oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
+        
+        // Adım verisi oluştur/güncelle
+        allow write: if isUser(userId);
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
+      }
+      
+      // ========== AD_LOGS ALT KOLEKSİYONU (Kullanıcı Reklam Geçmişi) ==========
+      
+      match /ad_logs/{logId} {
+        // Kendi reklam geçmişini oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
+        
+        // Reklam logu oluştur
+        allow create: if isUser(userId);
+        
+        // Loglar güncellenemez
+        allow update: if false;
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
+      }
+      
+      // ========== SESSIONS ALT KOLEKSİYONU (Oturum Takibi) ==========
+      
+      match /sessions/{sessionId} {
+        // Kendi oturumlarını oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
+        
+        // Oturum oluştur/güncelle
+        allow write: if isUser(userId);
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
+      }
+      
+      // ========== DAILY_SESSIONS ALT KOLEKSİYONU ==========
+      
+      match /daily_sessions/{dateKey} {
+        // Kendi günlük oturum verilerini oku veya Admin okuyabilir
+        allow read: if isUser(userId) || isAdmin();
+        
+        // Günlük oturum verisi oluştur/güncelle
+        allow write: if isUser(userId);
+        
+        // Admin silebilir (kullanıcı silme için)
+        allow delete: if isAdmin();
+      }
+      
+      // ========== TÜM ALT KOLEKSİYONLAR İÇİN ADMIN SİLME ==========
+      // Yukarıda tanımlanmamış herhangi bir alt koleksiyon için
+      match /{anySubcollection}/{anyDoc} {
+        allow read: if isUser(userId) || isAdmin();
+        allow delete: if isAdmin();
+      }
+    }
+    
+    // ========== TEAMS KOLEKSİYONU ==========
+    
+    match /teams/{teamId} {
+      // Herkes takım bilgisini okuyabilir (sıralama amaçlı)
+      allow read: if isAuthenticated();
+      
+      // Lider takımı oluşturabilir (Cloud Function)
+      allow create: if isAuthenticated();
+      
+      // Lider takım bilgilerini güncelleyebilir
+      allow update: if isTeamLeader(teamId);
+      
+      // Admin takımları güncelleyebilir
+      allow update: if isAdmin();
+      
+      // Üye katılma/ayrılma işlemleri (members_count, member_ids, team_bonus_steps, team_bonus_converted, total_team_hope)
+      allow update: if isAuthenticated() &&
+                      request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['members_count', 'member_ids', 'team_bonus_steps', 'team_bonus_converted', 'total_team_hope']);
+      
+      // Lider veya admin takımı silebilir
+      allow delete: if isTeamLeader(teamId) || isAdmin();
+      
+      // ========== TEAM_MEMBERS ALT KOLEKSİYONU ==========
+      
+      match /team_members/{memberId} {
+        // Takım üyeleri herkes tarafından okunabilir
+        allow read: if isAuthenticated();
+        
+        // SEC-002 FIX: Sadece lider üye ekleyebilir veya kullanıcı kendini ekleyebilir
+        // Cloud Function Admin SDK kullandığı için bu kuraldan etkilenmez
+        allow create: if isTeamLeader(teamId) || isUser(memberId);
+        
+        // Lider veya üyenin kendisi güncelleyebilir
+        allow update: if isTeamLeader(teamId) || isUser(memberId);
+        
+        // Lider, admin veya üyenin kendisi çıkabilir (takımdan ayrılma)
+        allow delete: if isTeamLeader(teamId) || isAdmin() || isUser(memberId);
+      }
+    }
+    
+    // ========== DAILY_STEPS KOLEKSİYONU (DEPRECATED) ==========
+    // 🚨 NOT: Bu root koleksiyon artık KULLANILMIYOR
+    // Tüm daily_steps verisi users/{uid}/daily_steps/{dateKey} altında
+    // Bu kural sadece legacy uyumluluk için, client yazamaz
+    
+    match /daily_steps/{stepId} {
+      // Sadece admin okuyabilir (migration için)
+      allow read: if isAdmin();
+      
+      // Client yazamaz - tüm yazma users/{uid}/daily_steps üzerinden
+      allow write: if false;
+    }
+    
+    // ========== ACTIVITY_LOGS ROOT KOLEKSİYONU (Leaderboard için) ==========
+    
+    match /activity_logs/{logId} {
+      // Herkes okuyabilir (sıralama amaçlı)
+      allow read: if isAuthenticated();
+      
+      // BUG-011 FIX: Sadece kendi user_id'si ile log oluşturabilir
+      // Cloud Function Admin SDK kullandığı için bu kuraldan etkilenmez
+      allow create: if isAuthenticated() && 
+                       request.resource.data.user_id == request.auth.uid;
+      
+      // Sadece admin güncelleyebilir (bağış transfer durumu için)
+      allow update: if isAdmin();
+      
+      // Loglar silinemez
+      allow delete: if false;
+    }
+    
+    // ========== CONVERSION_LEDGER KOLEKSİYONU (P2-1: Denetim İzi) ==========
+    // 🚨 IMMUTABLE LEDGER: Sadece create, update/delete YASAK
+    // Her conversion için muhasebe kaydı - değiştirilemez
+    
+    match /conversion_ledger/{ledgerId} {
+      // Sadece kendi kayıtlarını okuyabilir (admin hariç)
+      allow read: if isAuthenticated() && 
+                     (request.auth.uid == resource.data.user_id || isAdmin());
+      
+      // 🚨 CREATE ONLY: Sadece kendi user_id'si ile oluşturabilir
+      // idempotency_key ile tekrar yazma engellenir (client tarafında)
+      allow create: if isAuthenticated() && 
+                       request.resource.data.user_id == request.auth.uid &&
+                       request.resource.data.idempotency_key != null &&
+                       request.resource.data.amount_steps != null &&
+                       request.resource.data.amount_hope != null &&
+                       request.resource.data.conversion_type != null &&
+                       request.resource.data.created_at != null;
+      
+      // 🚨 UPDATE YASAK: Ledger immutable
+      allow update: if false;
+      
+      // 🚨 DELETE YASAK: Ledger immutable
+      allow delete: if false;
+    }
+    
+    // ========== NOTIFICATIONS ROOT KOLEKSİYONU (Takım davetleri için) ==========
+    
+    match /notifications/{notificationId} {
+      // Oturum açmış kullanıcılar okuyabilir (client-side filtreleme yapılır)
+      allow read: if isAuthenticated();
+      
+      // Bildirim oluşturabilir (davet gönderme vb.)
+      allow create: if isAuthenticated();
+      
+      // Bildirim güncelleyebilir (kabul/reddet)
+      allow update: if isAuthenticated();
+      
+      // Bildirim silebilir
+      allow delete: if isAuthenticated();
+    }
+    
+    // ========== CHARITIES KOLEKSİYONU ==========
+    
+    match /charities/{charityId} {
+      // Herkes vakıf listesini okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Admin tam yetki
+      allow write: if isAdmin();
+      
+      // Normal kullanıcılar sadece bağış alanlarını güncelleyebilir
+      allow update: if isAuthenticated() &&
+                      request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['collected_amount', 'donor_count']);
+    }
+    
+    // ========== DONATIONS KOLEKSİYONU ==========
+    
+    match /donations/{donationId} {
+      // Admin tüm bağışları okuyabilir
+      allow read: if isAdmin();
+      
+      // Kullanıcı kendi bağışlarını okuyabilir
+      allow read: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      
+      // Bağış oluşturma (Cloud Function veya kullanıcı)
+      allow create: if isAuthenticated();
+      
+      // Sadece admin güncelleyebilir
+      allow update: if isAdmin();
+      
+      // Silinmez
+      allow delete: if false;
+    }
+    
+    // ========== ADMINS KOLEKSİYONU ==========
+    
+    match /admins/{adminId} {
+      // Sadece kendi admin doc'unu okuyabilir (gizlilik için)
+      // Admin listesi gerekiyorsa adminler için ayrı query
+      allow read: if isAuthenticated() && (request.auth.uid == adminId || isAdmin());
+      
+      // Admin ekleme sadece mevcut adminler (Super Admin)
+      allow write: if isAdmin();
+    }
+    
+    // ========== ADMIN_STATS KOLEKSİYONU ==========
+    
+    match /admin_stats/{statId} {
+      // Sadece adminler okuyabilir
+      allow read: if isAdmin();
+      
+      // Cloud Function günceller
+      allow write: if isAdmin();
+    }
+    
+    // ========== ADMIN_LOGS KOLEKSİYONU ==========
+    
+    match /admin_logs/{logId} {
+      // Sadece adminler okuyabilir
+      allow read: if isAdmin();
+      
+      // Admin işlem yaptığında log oluşturur
+      allow create: if isAdmin();
+      
+      // Loglar silinemez/güncellenemez
+      allow update, delete: if false;
+    }
+    
+    // ========== BADGE_DEFINITIONS KOLEKSİYONU ==========
+    
+    match /badge_definitions/{badgeId} {
+      // Herkes rozet tanımlarını okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Sadece admin ekleyebilir/güncelleyebilir/silebilir
+      allow write: if isAdmin();
+    }
+    
+    // ========== BROADCAST_NOTIFICATIONS KOLEKSİYONU ==========
+    
+    match /broadcast_notifications/{notificationId} {
+      // Admin okuyabilir
+      allow read: if isAdmin();
+      
+      // Admin gönderebilir
+      allow create: if isAdmin();
+      
+      // Silinemez
+      allow delete: if false;
+    }
+    
+    // ========== SCHEDULED_NOTIFICATIONS KOLEKSİYONU ==========
+    
+    match /scheduled_notifications/{notificationId} {
+      // Admin okuyabilir
+      allow read: if isAdmin();
+      
+      // Admin oluşturabilir/güncelleyebilir
+      allow create, update: if isAdmin();
+      
+      // Admin silebilir
+      allow delete: if isAdmin();
+    }
+    
+    // ========== DAILY_STATS KOLEKSİYONU ==========
+    
+    match /daily_stats/{dateKey} {
+      // Admin okuyabilir
+      allow read: if isAdmin();
+      
+      // Cloud Function günceller
+      allow write: if isAdmin();
+    }
+    
+    // ========== AD_LOGS KOLEKSİYONU (Reklam Takibi) ==========
+    
+    match /ad_logs/{logId} {
+      // Admin tüm reklam loglarını okuyabilir
+      allow read: if isAdmin();
+      
+      // Oturum açmış kullanıcılar reklam logu oluşturabilir
+      allow create: if isAuthenticated();
+      
+      // Loglar silinemez/güncellenemez
+      allow update, delete: if false;
+    }
+    
+    // ========== AD_ERRORS KOLEKSİYONU (Reklam Hataları) ==========
+    
+    match /ad_errors/{errorId} {
+      // Admin tüm hata loglarını okuyabilir
+      allow read: if isAdmin();
+      
+      // Herkes (oturum açmış) hata logu oluşturabilir
+      allow create: if isAuthenticated();
+      
+      // Loglar silinemez/güncellenemez
+      allow update, delete: if false;
+    }
+    
+    // ========== STEP_LEADERBOARD KOLEKSİYONU ==========
+    
+    match /step_leaderboard/{docId} {
+      // Herkes sıralamayı okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Cloud Function tarafından güncellenir
+      allow write: if false;
+    }
+    
+    // ========== DONATION_LEADERBOARD KOLEKSİYONU ==========
+    
+    match /donation_leaderboard/{docId} {
+      // Herkes sıralamayı okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Cloud Function tarafından güncellenir
+      allow write: if false;
+    }
+    
+    // ========== CHARITY_COMMENTS KOLEKSİYONU ==========
+    
+    match /charity_comments/{commentId} {
+      // Herkes yorumları okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Oturum açmış kullanıcılar yorum ekleyebilir
+      allow create: if isAuthenticated() && 
+                       request.resource.data.user_id == request.auth.uid;
+      
+      // Kendi yorumunu silebilir veya admin silebilir
+      allow delete: if (isAuthenticated() && resource.data.user_id == request.auth.uid) || isAdmin();
+    }
+    
+    // ========== HOPE_LEADERBOARD KOLEKSİYONU ==========
+    
+    match /hope_leaderboard/{docId} {
+      // Herkes sıralamayı okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Cloud Function tarafından güncellenir
+      allow write: if isAuthenticated();
+    }
+    
+    // ========== TEAM_LEADERBOARD KOLEKSİYONU ==========
+    
+    match /team_leaderboard/{docId} {
+      // Herkes takım sıralamasını okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Cloud Function tarafından güncellenir
+      allow write: if isAuthenticated();
+    }
+    
+    // ========== INVITATIONS KOLEKSİYONU ==========
+    
+    match /invitations/{inviteId} {
+      // Davetleri okuma ve yazma
+      allow read, write: if isAuthenticated();
+    }
+    
+    // ========== USER_BADGES KOLEKSİYONU ==========
+    
+    match /user_badges/{docId} {
+      // Kullanıcı rozetlerini okuma ve yazma
+      allow read, write: if isAuthenticated();
+    }
+    
+    // ========== APP_SETTINGS KOLEKSİYONU ==========
+    
+    match /app_settings/{docId} {
+      // Herkes ayarları okuyabilir
+      allow read: if isAuthenticated();
+      
+      // Sadece admin güncelleyebilir
+      allow write: if isAdmin();
+    }
+    
+    // ========== MONTHLY_HOPE_VALUE KOLEKSİYONU ==========
+    
+    match /monthly_hope_value/{monthKey} {
+      // Sadece admin okuyabilir (kullanıcılar görmemeli)
+      allow read: if isAdmin();
+      
+      // Cloud Function tarafından yazılır, admin güncelleyebilir
+      allow write: if isAdmin();
+    }
+    
+    // ========== AD_REVENUE_HISTORY KOLEKSİYONU ==========
+    
+    match /ad_revenue_history/{docId} {
+      // Sadece admin okuyabilir
+      allow read: if isAdmin();
+      
+      // Cloud Function tarafından yazılır
+      allow write: if isAdmin();
+    }
+    
+    // ========== MAIL KOLEKSIYONU (Firebase Trigger Email Extension) ==========
+    
+    match /mail/{mailId} {
+      // Sadece Cloud Function yazabilir (client yazamaz)
+      allow read, write: if false;
+    }
+    
+    // ========== VERIFICATION CODES KOLEKSIYONU ==========
+    
+    match /verification_codes/{codeId} {
+      // Sadece Cloud Function erişebilir
+      allow read, write: if false;
+    }
+    
+    // ========== PASSWORD RESET CODES KOLEKSIYONU ==========
+    
+    match /password_reset_codes/{codeId} {
+      // Sadece Cloud Function erişebilir
+      allow read, write: if false;
+    }
+    
+    // ========== CATCH ALL (Güvenli Varsayılan) ==========
+    
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+/*
+AÇIKLAMALAR:
+
+1. USERS Koleksiyonu:
+   - Kendi profilinizi okuyabilirsiniz
+   - Kendi profilinizi güncelleyebilirsiniz (uid, email, created_at korumalı)
+   - Diğer kullanıcıları okuyabilirsiniz (sıralama amaçlı)
+
+2. NOTIFICATIONS:
+   - Sadece kendi bildirimlerinizi okuyabilirsiniz
+   - Cloud Function bildirimleri oluşturur/günceller
+
+3. TEAMS:
+   - Herkes takımları görebilir (sıralama)
+   - Lider takımı yönetebilir
+   - team_members alt koleksiyonu herkese açık
+
+4. DAILY_STEPS:
+   - Kendi adım verinizi görürsünüz
+   - Cloud Function tarafından yönetilir
+
+5. CHARITIES:
+   - Herkes vakıfları görebilir
+   - Admin tarafından yönetilir (Cloud Functions)
+
+6. LEADERBOARDS:
+   - Herkes sıralamaları görebilir
+   - Cloud Function tarafından otomatik güncellenir
+
+ENDEKSLER (Firestore Console'da oluştur):
+- collections/teams fields(referral_code) UNIQUE
+- collections/daily_steps fields(user_id, date DESC)
+- collections/users fields(current_team_id)
+*/

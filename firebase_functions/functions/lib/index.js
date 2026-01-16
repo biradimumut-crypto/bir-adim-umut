@@ -1,11 +1,18 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMonthlyHopeSummary = exports.approvePendingDonations = exports.calculateMonthlyHopeValueManual = exports.calculateMonthlyHopeValue = exports.fetchAdMobRevenueManual = exports.fetchAdMobRevenue = exports.manualDistributeLeaderboardRewards = exports.distributeMonthlyLeaderboardRewards = exports.processScheduledNotifications = exports.triggerMonthlyReset = exports.resetMonthlyCarryoverSteps = exports.getDonationReport = exports.getMonthlyStepReport = exports.toggleUserBan = exports.sendBroadcastNotification = exports.manualCalculateAdminStats = exports.calculateAdminStats = exports.manualResetMonthlyTeamHope = exports.manualResetDailyTeamSteps = exports.resetMonthlyTeamHope = exports.resetDailyTeamSteps = exports.carryOverDailySteps = exports.migrateUsersFullNameLowercase = exports.rejectTeamInvite = exports.acceptTeamInvite = exports.inviteUserToTeam = exports.joinTeamByReferral = exports.createTeam = void 0;
+exports.leaveTeam = exports.joinTeam = exports.donateHope = exports.resetPasswordWithCode = exports.sendPasswordResetCode = exports.verifyEmailCode = exports.sendVerificationCode = exports.deleteAccount = exports.getMonthlyHopeSummary = exports.approvePendingDonations = exports.calculateMonthlyHopeValueManual = exports.calculateMonthlyHopeValue = exports.fetchAdMobRevenueManual = exports.fetchAdMobRevenue = exports.manualDistributeLeaderboardRewards = exports.distributeMonthlyLeaderboardRewards = exports.processScheduledNotifications = exports.triggerMonthlyReset = exports.resetMonthlyCarryoverSteps = exports.getDonationReport = exports.getMonthlyStepReport = exports.toggleUserBan = exports.sendBroadcastNotification = exports.manualCalculateAdminStats = exports.calculateAdminStats = exports.manualResetMonthlyTeamHope = exports.manualResetDailyTeamSteps = exports.resetMonthlyTeamHope = exports.resetDailyTeamSteps = exports.carryOverDailySteps = exports.migrateUsersFullNameLowercase = exports.rejectTeamInvite = exports.acceptTeamInvite = exports.inviteUserToTeam = exports.joinTeamByReferral = exports.createTeam = void 0;
 const admin = require("firebase-admin");
 const functions = require("firebase-functions");
 const uuid_1 = require("uuid");
 admin.initializeApp();
 const db = admin.firestore();
+// 🚨 P1-2: App Check Helper (v1 API için)
+// context.app undefined ise App Check token yok demektir
+function assertAppCheck(context) {
+    if (!context.app) {
+        throw new functions.https.HttpsError("failed-precondition", "App Check token gerekli. Lütfen uygulamayı güncelleyin.");
+    }
+}
 /**
  * BULUT FONKSİYONU 1: Takım Oluşturma
  *
@@ -18,9 +25,12 @@ const db = admin.firestore();
  * @param data.teamName - Takım adı
  * @param data.logoUrl - Takım logosu URL'i (opsiyonel)
  * @param context.auth.uid - Takım kurucusu (Lider)
+ * 🚨 P1-2: App Check enforcement aktif
  */
 exports.createTeam = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     // Kimlik doğrulama kontrolü
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
@@ -98,9 +108,12 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
  *
  * @param data.referralCode - Takımın referral kodu
  * @param context.auth.uid - Katılan kullanıcı
+ * 🚨 P1-2: App Check enforcement aktif
  */
 exports.joinTeamByReferral = functions.https.onCall(async (data, context) => {
     var _a, _b;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
     }
@@ -178,9 +191,12 @@ exports.joinTeamByReferral = functions.https.onCall(async (data, context) => {
  * @param data.targetUserNameOrNickname - Davet edilecek kişinin adı/nickname
  * @param data.teamId - Daveti gönderen takım
  * @param context.auth.uid - Lider
+ * 🚨 P1-2: App Check enforcement aktif
  */
 exports.inviteUserToTeam = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
     }
@@ -291,9 +307,12 @@ exports.inviteUserToTeam = functions.https.onCall(async (data, context) => {
  * @param data.notificationId - Bildirimin ID'si
  * @param data.teamId - Takım ID'si
  * @param context.auth.uid - Kabul eden kullanıcı
+ * 🚨 P1-2: App Check enforcement aktif
  */
 exports.acceptTeamInvite = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
     }
@@ -364,9 +383,12 @@ exports.acceptTeamInvite = functions.https.onCall(async (data, context) => {
  *
  * @param data.notificationId - Bildirimin ID'si
  * @param context.auth.uid - Davet edilen kullanıcı
+ * 🚨 P1-2: App Check enforcement aktif
  */
 exports.rejectTeamInvite = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
     }
@@ -422,9 +444,12 @@ async function getDeviceTokens(userId) {
  *
  * Bu fonksiyon bir kerelik çalıştırılır.
  * Tüm kullanıcıların full_name alanını lowercase olarak full_name_lowercase alanına yazar.
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.migrateUsersFullNameLowercase = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     // Admin kontrolü - sadece auth uid'si olan kullanıcılar çalıştırabilir
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
@@ -690,9 +715,12 @@ exports.resetMonthlyTeamHope = functions.pubsub
  * BULUT FONKSİYONU: Manuel Günlük Sıfırlama (Test/Admin için)
  *
  * Admin tarafından manuel olarak çağrılabilir.
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.manualResetDailyTeamSteps = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     // Admin kontrolü - isteğe bağlı
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
@@ -738,9 +766,12 @@ exports.manualResetDailyTeamSteps = functions.https.onCall(async (data, context)
  * BULUT FONKSİYONU: Manuel Aylık Sıfırlama (Test/Admin için)
  *
  * Admin tarafından manuel olarak çağrılabilir.
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.manualResetMonthlyTeamHope = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
     }
@@ -899,9 +930,12 @@ exports.calculateAdminStats = functions.pubsub
 });
 /**
  * ADMIN FONKSİYON 2: Manuel İstatistik Hesaplama (Admin tarafından tetiklenir)
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.manualCalculateAdminStats = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
     }
@@ -980,9 +1014,12 @@ exports.manualCalculateAdminStats = functions.https.onCall(async (data, context)
 });
 /**
  * ADMIN FONKSİYON 3: Toplu Bildirim Gönderme
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.sendBroadcastNotification = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
     }
@@ -1078,9 +1115,12 @@ exports.sendBroadcastNotification = functions.https.onCall(async (data, context)
 });
 /**
  * ADMIN FONKSİYON 4: Kullanıcı Banla/Unban
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.toggleUserBan = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
     }
@@ -1127,9 +1167,12 @@ exports.toggleUserBan = functions.https.onCall(async (data, context) => {
 });
 /**
  * ADMIN FONKSİYON 5: Aylık Adım/Hope Raporları
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.getMonthlyStepReport = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
     }
@@ -1179,9 +1222,12 @@ exports.getMonthlyStepReport = functions.https.onCall(async (data, context) => {
 });
 /**
  * ADMIN FONKSİYON 6: Bağış Raporu (Detaylı)
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.getDonationReport = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
     }
@@ -1354,9 +1400,12 @@ exports.resetMonthlyCarryoverSteps = functions.pubsub
 });
 /**
  * Admin tarafından manuel aylık sıfırlama tetikleme
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.triggerMonthlyReset = functions.https.onCall(async (data, context) => {
     var _a, _b;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     // Admin kontrolü
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Oturum açmanız gerekiyor");
@@ -1848,9 +1897,12 @@ async function sendTeamRewardNotification(userId, teamName, rank, rewardSteps) {
 }
 /**
  * Manuel ödül dağıtımı (Admin için test amaçlı)
+ * 🚨 P1-2 REV.2: App Check enforcement aktif
  */
 exports.manualDistributeLeaderboardRewards = functions.https.onCall(async (data, context) => {
     var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
     // Admin kontrolü
     if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new functions.https.HttpsError("unauthenticated", "Oturum açılmalı");
@@ -1892,4 +1944,410 @@ Object.defineProperty(exports, "calculateMonthlyHopeValue", { enumerable: true, 
 Object.defineProperty(exports, "calculateMonthlyHopeValueManual", { enumerable: true, get: function () { return monthly_hope_calculator_1.calculateMonthlyHopeValueManual; } });
 Object.defineProperty(exports, "approvePendingDonations", { enumerable: true, get: function () { return monthly_hope_calculator_1.approvePendingDonations; } });
 Object.defineProperty(exports, "getMonthlyHopeSummary", { enumerable: true, get: function () { return monthly_hope_calculator_1.getMonthlyHopeSummary; } });
+// ==================== HESAP SİLME (BUG-006) ====================
+var delete_account_1 = require("./delete-account");
+Object.defineProperty(exports, "deleteAccount", { enumerable: true, get: function () { return delete_account_1.deleteAccount; } });
+// ==================== EMAIL DOĞRULAMA KODU ====================
+var email_verification_1 = require("./email-verification");
+Object.defineProperty(exports, "sendVerificationCode", { enumerable: true, get: function () { return email_verification_1.sendVerificationCode; } });
+Object.defineProperty(exports, "verifyEmailCode", { enumerable: true, get: function () { return email_verification_1.verifyEmailCode; } });
+// ==================== ŞİFRE SIFIRLAMA KODU ====================
+var password_reset_1 = require("./password-reset");
+Object.defineProperty(exports, "sendPasswordResetCode", { enumerable: true, get: function () { return password_reset_1.sendPasswordResetCode; } });
+Object.defineProperty(exports, "resetPasswordWithCode", { enumerable: true, get: function () { return password_reset_1.resetPasswordWithCode; } });
+// ==================== BAŞDENETÇİ FIX: BAĞIŞ FONKSİYONU ====================
+/**
+ * BULUT FONKSİYONU: donateHope
+ *
+ * 🚨 BAŞDENETÇİ ZORUNLULUĞU: Tüm bağış muhasebesi tek transaction'da
+ *
+ * İş Mantığı (TEK TRANSACTION):
+ * 1. Kullanıcı bakiyesi düşür (wallet_balance_hope)
+ * 2. Bağış kaydı oluştur (donations)
+ * 3. Charity stats güncelle (collected_amount, donor_count)
+ * 4. Activity log yaz (activity_logs + user subcollection)
+ * 5. Kullanıcı istatistiklerini güncelle (lifetime_donated_hope, total_donation_count)
+ *
+ * @param data.charityId - Bağış yapılacak vakıf ID
+ * @param data.amount - Bağış miktarı (Hope)
+ * @param context.auth.uid - Bağış yapan kullanıcı
+ * 🚨 P1-2: App Check enforcement aktif
+ */
+exports.donateHope = functions.https.onCall(async (data, context) => {
+    var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
+    if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
+        throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
+    }
+    const userId = context.auth.uid;
+    const { charityId, amount, idempotencyKey } = data;
+    // Validasyon
+    if (!charityId || typeof charityId !== "string") {
+        throw new functions.https.HttpsError("invalid-argument", "Geçerli bir vakıf ID gereklidir.");
+    }
+    if (!amount || typeof amount !== "number" || amount <= 0) {
+        throw new functions.https.HttpsError("invalid-argument", "Bağış miktarı pozitif bir sayı olmalıdır.");
+    }
+    // Minimum bağış kontrolü
+    if (amount < 1) {
+        throw new functions.https.HttpsError("invalid-argument", "Minimum bağış miktarı 1 Hope'tur.");
+    }
+    // 🚨 BAŞDENETÇİ FIX: Idempotency key zorunlu
+    if (!idempotencyKey || typeof idempotencyKey !== "string") {
+        throw new functions.https.HttpsError("invalid-argument", "Idempotency key gereklidir (double işlem koruması).");
+    }
+    // 🚨 BAŞDENETÇİ FIX REV.2: Deterministik doc ID ile race condition koruması
+    // Format: donations/{userId}_{idempotencyKey}
+    const donationId = `${userId}_${idempotencyKey}`;
+    const donationRef = db.collection("donations").doc(donationId);
+    try {
+        // 🚨 TEK TRANSACTION İÇİNDE TÜM MUHASEBE + IDEMPOTENCY CHECK
+        const result = await db.runTransaction(async (transaction) => {
+            // 0. 🚨 IDEMPOTENCY CHECK (Transaction İÇİNDE - race condition korumalı)
+            const existingDonationDoc = await transaction.get(donationRef);
+            if (existingDonationDoc.exists) {
+                // Aynı işlem daha önce yapılmış - idempotent return
+                const existingData = existingDonationDoc.data();
+                console.log(`Idempotent call detected (transaction-safe): ${donationId}`);
+                return {
+                    idempotent: true,
+                    donationId: donationId,
+                    charityName: existingData.charity_name,
+                    newBalance: existingData.new_balance_after || 0,
+                };
+            }
+            // 1. Kullanıcı dokümanını oku
+            const userRef = db.collection("users").doc(userId);
+            const userDoc = await transaction.get(userRef);
+            if (!userDoc.exists) {
+                throw new functions.https.HttpsError("not-found", "Kullanıcı bulunamadı.");
+            }
+            const userData = userDoc.data();
+            const currentBalance = (userData.wallet_balance_hope || 0);
+            // Bakiye kontrolü
+            if (currentBalance < amount) {
+                throw new functions.https.HttpsError("failed-precondition", `Yetersiz bakiye. Mevcut: ${currentBalance}, İstenen: ${amount}`);
+            }
+            // 2. Charity dokümanını oku
+            const charityRef = db.collection("charities").doc(charityId);
+            const charityDoc = await transaction.get(charityRef);
+            if (!charityDoc.exists) {
+                throw new functions.https.HttpsError("not-found", "Vakıf bulunamadı.");
+            }
+            const charityData = charityDoc.data();
+            // 3. İlk bağış kontrolü (donor_count için)
+            const existingDonations = await db
+                .collection("donations")
+                .where("user_id", "==", userId)
+                .where("charity_id", "==", charityId)
+                .limit(1)
+                .get();
+            const isFirstDonation = existingDonations.empty;
+            // ====== YAZMA AŞAMASI (Tüm okumalar bittikten sonra) ======
+            const now = new Date();
+            const donationMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+            const timestamp = admin.firestore.FieldValue.serverTimestamp();
+            // 4. Kullanıcı bakiyesini düşür + istatistikleri güncelle
+            transaction.update(userRef, {
+                wallet_balance_hope: admin.firestore.FieldValue.increment(-amount),
+                lifetime_donated_hope: admin.firestore.FieldValue.increment(amount),
+                total_donation_count: admin.firestore.FieldValue.increment(1),
+            });
+            // 5. Bağış kaydı oluştur (DETERMİNİSTİK ID ile - race condition korumalı)
+            transaction.set(donationRef, {
+                user_id: userId,
+                user_name: userData.display_name || userData.full_name || "Anonim",
+                charity_id: charityId,
+                charity_name: charityData.name,
+                amount: amount,
+                donation_month: donationMonth,
+                donation_status: "pending", // Ay sonu onaylanacak
+                created_at: timestamp,
+                idempotency_key: idempotencyKey, // Backward compatibility için
+                new_balance_after: currentBalance - amount, // Idempotent return için
+            });
+            // 6. Global activity log ekle
+            const globalLogRef = db.collection("activity_logs").doc();
+            transaction.set(globalLogRef, {
+                user_id: userId,
+                user_name: userData.display_name || userData.full_name || "Anonim",
+                activity_type: "donation",
+                action_type: "donation",
+                recipient_id: charityId,
+                recipient_name: charityData.name,
+                charity_id: charityId,
+                charity_name: charityData.name,
+                charity_logo_url: charityData.logo_url || charityData.image_url || null,
+                recipient_type: charityData.type || "charity",
+                amount: amount,
+                hope_amount: amount,
+                donation_month: donationMonth,
+                donation_status: "pending",
+                created_at: timestamp,
+                timestamp: timestamp,
+            });
+            // 7. User subcollection activity log ekle (rozet hesaplama için)
+            const userLogRef = userRef.collection("activity_logs").doc();
+            transaction.set(userLogRef, {
+                user_id: userId,
+                activity_type: "donation",
+                action_type: "donation",
+                target_name: charityData.name,
+                charity_name: charityData.name,
+                charity_id: charityId,
+                charity_logo_url: charityData.logo_url || charityData.image_url || null,
+                recipient_id: charityId,
+                recipient_type: charityData.type || "charity",
+                amount: amount,
+                hope_amount: amount,
+                created_at: timestamp,
+                timestamp: timestamp,
+            });
+            // 8. Charity stats güncelle
+            const charityUpdateData = {
+                collected_amount: admin.firestore.FieldValue.increment(amount),
+            };
+            if (isFirstDonation) {
+                charityUpdateData.donor_count = admin.firestore.FieldValue.increment(1);
+            }
+            transaction.update(charityRef, charityUpdateData);
+            return {
+                idempotent: false,
+                donationId: donationId,
+                charityName: charityData.name,
+                newBalance: currentBalance - amount,
+            };
+        });
+        // 🚨 Idempotent ve normal dönüşü ayır
+        if (result.idempotent) {
+            return {
+                success: true,
+                message: `Bağış zaten işlendi (idempotent).`,
+                donationId: result.donationId,
+                newBalance: result.newBalance,
+                idempotent: true,
+            };
+        }
+        return {
+            success: true,
+            message: `${result.charityName} vakfına ${amount} Hope bağışlandı.`,
+            donationId: result.donationId,
+            newBalance: result.newBalance,
+        };
+    }
+    catch (error) {
+        console.error("donateHope hatası:", error);
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        throw new functions.https.HttpsError("internal", error.message);
+    }
+});
+// ==================== BAŞDENETÇİ FIX: TAKIMA KATILMA FONKSİYONU ====================
+/**
+ * BULUT FONKSİYONU: joinTeam
+ *
+ * 🚨 BAŞDENETÇİ ZORUNLULUĞU: Takım istatistikleri sadece server yazmalı
+ *
+ * İş Mantığı:
+ * 1. Kullanıcı başka takımda değilse katıl
+ * 2. team_members'a ekle
+ * 3. User current_team_id güncelle
+ * 4. Team members_count artır
+ *
+ * @param data.teamId - Katılınacak takım ID
+ * @param context.auth.uid - Katılan kullanıcı
+ * 🚨 P1-2: App Check enforcement aktif
+ */
+exports.joinTeam = functions.https.onCall(async (data, context) => {
+    var _a, _b;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
+    if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
+        throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
+    }
+    const userId = context.auth.uid;
+    const { teamId } = data;
+    if (!teamId || typeof teamId !== "string") {
+        throw new functions.https.HttpsError("invalid-argument", "Geçerli bir takım ID gereklidir.");
+    }
+    try {
+        // 🚨 BAŞDENETÇİ FIX: Idempotency - Zaten üye mi kontrolü (transaction ÖNCESİ hızlı check)
+        const quickMemberCheck = await db
+            .collection("teams")
+            .doc(teamId)
+            .collection("team_members")
+            .doc(userId)
+            .get();
+        if (quickMemberCheck.exists) {
+            // Zaten üye - idempotent başarılı dönüş
+            const teamDoc = await db.collection("teams").doc(teamId).get();
+            const teamName = teamDoc.exists ? (_b = teamDoc.data()) === null || _b === void 0 ? void 0 : _b.name : "Takım";
+            console.log(`Idempotent joinTeam call: user ${userId} already in team ${teamId}`);
+            return {
+                success: true,
+                message: `Zaten ${teamName} takımının üyesisiniz (idempotent).`,
+                teamId: teamId,
+                idempotent: true,
+            };
+        }
+        const result = await db.runTransaction(async (transaction) => {
+            // 1. Kullanıcı dokümanını oku
+            const userRef = db.collection("users").doc(userId);
+            const userDoc = await transaction.get(userRef);
+            if (!userDoc.exists) {
+                throw new functions.https.HttpsError("not-found", "Kullanıcı bulunamadı.");
+            }
+            const userData = userDoc.data();
+            // Kullanıcı zaten bir takımda mı?
+            if (userData.current_team_id) {
+                throw new functions.https.HttpsError("failed-precondition", "Zaten bir takımda üyesiniz. Önce mevcut takımdan ayrılın.");
+            }
+            // 2. Takım dokümanını oku
+            const teamRef = db.collection("teams").doc(teamId);
+            const teamDoc = await transaction.get(teamRef);
+            if (!teamDoc.exists) {
+                throw new functions.https.HttpsError("not-found", "Takım bulunamadı.");
+            }
+            const teamData = teamDoc.data();
+            // 3. Zaten üye mi kontrol et
+            const memberRef = teamRef.collection("team_members").doc(userId);
+            const memberDoc = await transaction.get(memberRef);
+            if (memberDoc.exists) {
+                throw new functions.https.HttpsError("already-exists", "Zaten bu takımın üyesisiniz.");
+            }
+            // Max üye kontrolü
+            const maxMembers = teamData.max_members || 50;
+            if ((teamData.members_count || 0) >= maxMembers) {
+                throw new functions.https.HttpsError("resource-exhausted", "Takım maksimum üye kapasitesine ulaşmış.");
+            }
+            // ====== YAZMA AŞAMASI ======
+            const timestamp = admin.firestore.FieldValue.serverTimestamp();
+            // 4. team_members'a ekle
+            transaction.set(memberRef, {
+                team_id: teamId,
+                user_id: userId,
+                member_status: "active",
+                join_date: timestamp,
+                member_total_hope: 0,
+                member_daily_steps: 0,
+            });
+            // 5. User current_team_id güncelle
+            transaction.update(userRef, {
+                current_team_id: teamId,
+            });
+            // 6. Team stats güncelle
+            transaction.update(teamRef, {
+                members_count: admin.firestore.FieldValue.increment(1),
+                member_ids: admin.firestore.FieldValue.arrayUnion(userId),
+            });
+            return {
+                teamName: teamData.name,
+            };
+        });
+        return {
+            success: true,
+            message: `${result.teamName} takımına katıldınız.`,
+            teamId: teamId,
+        };
+    }
+    catch (error) {
+        console.error("joinTeam hatası:", error);
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        throw new functions.https.HttpsError("internal", error.message);
+    }
+});
+// ==================== BAŞDENETÇİ FIX: TAKIMDAN AYRILMA FONKSİYONU ====================
+/**
+ * BULUT FONKSİYONU: leaveTeam
+ *
+ * 🚨 BAŞDENETÇİ ZORUNLULUĞU: Takım istatistikleri sadece server yazmalı
+ *
+ * İş Mantığı:
+ * 1. Kullanıcı takımda üye mi kontrol et
+ * 2. Lider ise ve başka üye varsa ayrılamaz
+ * 3. team_members'dan sil
+ * 4. User current_team_id temizle
+ * 5. Team members_count azalt
+ *
+ * @param context.auth.uid - Ayrılan kullanıcı
+ * 🚨 P1-2: App Check enforcement aktif
+ */
+exports.leaveTeam = functions.https.onCall(async (data, context) => {
+    var _a;
+    // 🚨 App Check kontrolü
+    assertAppCheck(context);
+    if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
+        throw new functions.https.HttpsError("unauthenticated", "Kullanıcı oturum açmış olmalıdır.");
+    }
+    const userId = context.auth.uid;
+    try {
+        const result = await db.runTransaction(async (transaction) => {
+            // 1. Kullanıcı dokümanını oku
+            const userRef = db.collection("users").doc(userId);
+            const userDoc = await transaction.get(userRef);
+            if (!userDoc.exists) {
+                throw new functions.https.HttpsError("not-found", "Kullanıcı bulunamadı.");
+            }
+            const userData = userDoc.data();
+            const teamId = userData.current_team_id;
+            if (!teamId) {
+                throw new functions.https.HttpsError("failed-precondition", "Herhangi bir takımda üye değilsiniz.");
+            }
+            // 2. Takım dokümanını oku
+            const teamRef = db.collection("teams").doc(teamId);
+            const teamDoc = await transaction.get(teamRef);
+            if (!teamDoc.exists) {
+                // Takım silinmişse sadece user'ı temizle
+                transaction.update(userRef, { current_team_id: null });
+                return { teamName: "Silinmiş Takım" };
+            }
+            const teamData = teamDoc.data();
+            // 3. Lider kontrolü
+            if (teamData.leader_uid === userId) {
+                const membersCount = teamData.members_count || 1;
+                if (membersCount > 1) {
+                    throw new functions.https.HttpsError("failed-precondition", "Takım lideri olarak takımda başka üyeler varken ayrılamazsınız. Önce liderliği devredin veya diğer üyeleri çıkarın.");
+                }
+                // Lider ve tek üye - takımı da sil
+                transaction.delete(teamRef);
+            }
+            else {
+                // Normal üye - takım stats güncelle
+                transaction.update(teamRef, {
+                    members_count: admin.firestore.FieldValue.increment(-1),
+                    member_ids: admin.firestore.FieldValue.arrayRemove(userId),
+                });
+            }
+            // 4. team_members'dan sil
+            const memberRef = teamRef.collection("team_members").doc(userId);
+            transaction.delete(memberRef);
+            // 5. User current_team_id temizle
+            transaction.update(userRef, {
+                current_team_id: null,
+            });
+            return {
+                teamName: teamData.name,
+                wasLeader: teamData.leader_uid === userId,
+            };
+        });
+        const message = result.wasLeader
+            ? `${result.teamName} takımı silindi (son üye olarak ayrıldınız).`
+            : `${result.teamName} takımından ayrıldınız.`;
+        return {
+            success: true,
+            message: message,
+        };
+    }
+    catch (error) {
+        console.error("leaveTeam hatası:", error);
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        throw new functions.https.HttpsError("internal", error.message);
+    }
+});
 //# sourceMappingURL=index.js.map
